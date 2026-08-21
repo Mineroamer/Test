@@ -23,6 +23,7 @@
     left: $("#count-left"),
     leftBox: $("#box-left"),
     toGo: $("#count-togo"),
+    toGoBox: $("#box-togo"),
     here: $("#count-here"),
     trail: $("#trail"),
     refusedWrap: $("#refused-wrap"),
@@ -224,11 +225,10 @@
     el.toGo.textContent = game.difficulty.showDistance ? game.toGo : "?";
     el.here.textContent = E.nameOf(game.current);
     el.back.disabled = !game.canBack();
-    el.back.title = game.status !== "playing" || game.trail.length < 2
-      ? "Step back to the country you came from. Free."
-      : game.canBack()
-        ? "Step back to " + E.nameOf(game.trail[game.trail.length - 2]) + ". Free."
-        : "No room to go back — the finish would be further than your guesses can reach.";
+    el.back.title = game.canBack()
+      ? "Step back to " + E.nameOf(game.trail[game.trail.length - 2]) + ". Free."
+      : "Step back to the country you came from. Free.";
+    el.toGoBox.dataset.alarm = String(game.outOfReach);
   }
 
   function renderBrief() {
@@ -425,16 +425,15 @@
     render();
 
     if (game.status === "won") speak("");
-    else if (game.status === "lost" && game.left > 0) {
-      speak("The finish is further away than your guesses can reach.", "miss");
+    else if (game.outOfReach) {
+      speak(E.nameOf(game.current) + " is further from the finish than your "
+        + game.left + (game.left === 1 ? " remaining guess" : " remaining guesses")
+        + " can carry you. Keep walking if you like — you have them to spend.", "miss");
     }
   }
 
   function stepBack() {
-    if (!game.back()) {
-      speak("No room to go back — the finish would be further than your guesses can reach.", "miss");
-      return;
-    }
+    if (!game.back()) return;
     log.push("<");
     justEntered = null;
     saveProgress();

@@ -411,15 +411,18 @@
       return { ok: true, code, from, move, link: linkBetween(from, code), status: this.status };
     }
 
-    /**
-     * Can you step back right now? Not at the start, and not when retreating
-     * would put the finish further away than your remaining guesses can carry
-     * you - Back is free, so it must never be the move that strands you.
-     */
+    /** Can you step back right now? Only the start has nothing behind it. */
     canBack() {
-      if (this.status !== "playing" || this.trail.length < 2) return false;
-      const previous = this.trail[this.trail.length - 2];
-      return distance(previous, this.end) <= this.left;
+      return this.status === "playing" && this.trail.length >= 2;
+    }
+
+    /**
+     * True when the finish can no longer be reached in the guesses left: every
+     * border crossing costs at least one. Worth saying out loud, but it does
+     * not end the round - you keep the guesses you paid for.
+     */
+    get outOfReach() {
+      return this.status === "playing" && this.toGo > this.left;
     }
 
     /** Free undo: return to the country you were on before this one. */
@@ -429,10 +432,15 @@
       return true;
     }
 
-    /** Lose when the guesses run out, or when the finish moves out of reach. */
+    /**
+     * The round ends when the guesses run out, and only then. Walking yourself
+     * somewhere the finish can no longer be reached from is worth a warning,
+     * not a closed door: the outcome is the same either way, and being cut off
+     * mid-walk by a number you cannot always see is no fun.
+     */
     settle() {
       if (this.status !== "playing") return;
-      if (this.left === 0 || this.toGo > this.left) this.status = "lost";
+      if (this.left === 0) this.status = "lost";
     }
 
     /** Border crossings taken beyond the shortest possible route. */

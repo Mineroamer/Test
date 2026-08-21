@@ -182,39 +182,20 @@ function newGame(start, end, difficulty) {
 }
 
 {
-  // Back is free, so it must never be the move that strands you: when
-  // retreating would put the finish out of reach, the way back closes.
-  const game = newGame("PT", "IT", "expert");
-  equal("Expert leaves little room", game.budget, 5);
-  game.play("Spain");
-  game.play("France");
-  equal("two guesses spent, three left", game.left, 3);
-  check("stepping back to Spain is still safe", game.canBack());
-  game.play("Germany");
-  game.play("Poland");
-  equal("four spent, one left", game.left, 1);
-  equal("but Poland is further out than that", game.toGo > game.left, true);
-  equal("so the round is already over", game.status, "lost");
-}
-
-{
   const game = newGame("PT", "IT", "expert");
   game.play("Spain");
   game.play("France");
   game.play("Germany");
   equal("three guesses spent, two left", game.left, 2);
   equal("Germany is two hops from Italy", game.toGo, 2);
-  check("backing up to France is safe - France is one hop out", game.canBack());
+  equal("the finish is still in reach", game.outOfReach, false);
   game.play("Austria");
-  equal("four spent, one left", game.left, 1);
   equal("Austria borders Italy", game.toGo, 1);
-  equal("but Germany, behind you, does not", E.distance("DE", "IT"), 2);
-  equal("so the way back is closed rather than fatal", game.canBack(), false);
-  equal("and Back does nothing", game.back(), false);
-  equal("the round is still live", game.status, "playing");
-  equal("you are still in Austria", game.current, "AT");
+  equal("one guess left, which is exactly enough", game.left, 1);
+  equal("so no warning", game.outOfReach, false);
   game.play("Italy");
-  equal("and it can still be won", game.status, "won");
+  equal("and it is won on the last guess", game.status, "won");
+  equal("with nothing to spare", game.left, 0);
 }
 
 {
@@ -223,18 +204,42 @@ function newGame(start, end, difficulty) {
   ["Italy", "Germany", "Greece", "Kenya", "Japan"].forEach((c) => game.play(c));
   equal("running out of guesses strands you", game.status, "lost");
   equal("you never left the start", game.current, "PT");
+  equal("and the counter is genuinely empty", game.left, 0);
 }
 
 {
-  // Wandering too far to get back in budget ends the round early.
+  // Walking somewhere the finish can no longer be reached from is a warning,
+  // not the end of the round: the guesses you paid for are still yours.
   const game = newGame("PT", "IT", "expert");
   game.play("Spain");
   game.play("France");
   game.play("Germany");
   game.play("Poland");
   check("Poland is further from Italy than the guesses left", game.toGo > game.left);
-  equal("that strands you", game.status, "lost");
-  check("with guesses still on the counter", game.left > 0);
+  equal("the game says so", game.outOfReach, true);
+  equal("but the round carries on", game.status, "playing");
+  equal("with a guess still on the counter", game.left, 1);
+  check("and it can still be spent", game.play("Czechia").ok);
+  equal("only then is it over", game.status, "lost");
+  equal("out of guesses, for real", game.left, 0);
+}
+
+{
+  // The way back is always open, even from a position that cannot be won.
+  const game = newGame("PT", "IT", "expert");
+  game.play("Spain");
+  game.play("France");
+  game.play("Germany");
+  game.play("Austria");
+  equal("four guesses spent", game.used, 4);
+  equal("Germany, behind you, is two hops from Italy", E.distance("DE", "IT"), 2);
+  equal("which is more than the one guess left", game.left, 1);
+  check("stepping back is still allowed", game.canBack());
+  check("and it works", game.back());
+  equal("you are in Germany", game.current, "DE");
+  equal("it cost nothing", game.used, 4);
+  equal("the finish is now out of reach", game.outOfReach, true);
+  equal("but you are still playing", game.status, "playing");
 }
 
 {
@@ -373,7 +378,7 @@ function newGame(start, end, difficulty) {
           complain("trail has a gap", game.trail[i - 1] + "->" + game.trail[i]);
         }
       }
-      if (game.toGo > game.left) complain("still playing with the finish out of reach", game.toGo + " > " + game.left);
+      if (game.outOfReach !== (game.toGo > game.left)) complain("outOfReach disagrees with the numbers", game.toGo + " vs " + game.left);
 
       const roll = rand();
       if (roll < 0.06) {
@@ -390,7 +395,7 @@ function newGame(start, end, difficulty) {
         if (did !== allowed) complain("back disagreed with canBack", allowed + " vs " + did);
         if (game.used !== wasUsed) complain("back cost a guess", wasUsed + " -> " + game.used);
         if (!did && game.trail.join(">") !== wasTrail) complain("a refused back still moved the player", game.trail.join(">"));
-        if (did && game.toGo > game.left) complain("back stranded the player", game.trail.join(">"));
+        if (did && game.status !== "playing") complain("back ended the round", game.status);
       } else if (roll < 0.30) {
         const all = Object.keys(COUNTRIES);
         game.play(all[Math.floor(rand() * all.length)]);
@@ -414,7 +419,7 @@ function newGame(start, end, difficulty) {
     } else if (game.status === "lost") {
       lost++;
       if (game.current === game.end) complain("lost while standing at the finish", game.trail.join(">"));
-      if (game.left > 0 && game.toGo <= game.left) complain("lost with a route still open", game.toGo + " <= " + game.left);
+      if (game.left > 0) complain("lost with guesses still on the counter", String(game.left));
     } else {
       complain("round left hanging", game.status);
     }

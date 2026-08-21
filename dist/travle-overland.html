@@ -879,7 +879,7 @@ button, input, textarea { font: inherit; color: inherit; }
       <dt>Guesses left</dt>
       <dd id="count-left">0</dd>
     </div>
-    <div class="counter">
+    <div class="counter" id="box-togo">
       <dt>Borders to go</dt>
       <dd id="count-togo">0</dd>
     </div>
@@ -920,7 +920,7 @@ button, input, textarea { font: inherit; color: inherit; }
         <li><strong>Back</strong> returns you to the country you came from. It is free, and you can keep going back as far as the start.</li>
         <li>Naming a country already on your trail also walks you back to it — that one costs a guess.</li>
         <li>The map is unlabelled on purpose. Every country you have crossed is filled in; the ringed country is the finish.</li>
-        <li>Run out of guesses, or wander so far that the finish is out of reach, and you are stranded.</li>
+        <li>The round ends when your guesses run out, and only then. Walk somewhere the finish can no longer be reached from and the game says so, but the guesses are yours to spend however you like.</li>
       </ul>
       <p><strong>Four levels.</strong> Scenic, Standard and Expert are daily: each deals its own route for the day, keeps its own streak, and resets at midnight your time. Finishing one leaves the other two untouched — they are three different walks, not the same walk at three settings. Unlimited is off the clock: a fresh route as often as you like.</p>
       <div class="house">
@@ -2294,15 +2294,18 @@ if (typeof module !== "undefined" && module.exports) {
       return { ok: true, code, from, move, link: linkBetween(from, code), status: this.status };
     }
 
-    /**
-     * Can you step back right now? Not at the start, and not when retreating
-     * would put the finish further away than your remaining guesses can carry
-     * you - Back is free, so it must never be the move that strands you.
-     */
+    /** Can you step back right now? Only the start has nothing behind it. */
     canBack() {
-      if (this.status !== "playing" || this.trail.length < 2) return false;
-      const previous = this.trail[this.trail.length - 2];
-      return distance(previous, this.end) <= this.left;
+      return this.status === "playing" && this.trail.length >= 2;
+    }
+
+    /**
+     * True when the finish can no longer be reached in the guesses left: every
+     * border crossing costs at least one. Worth saying out loud, but it does
+     * not end the round - you keep the guesses you paid for.
+     */
+    get outOfReach() {
+      return this.status === "playing" && this.toGo > this.left;
     }
 
     /** Free undo: return to the country you were on before this one. */
@@ -2312,10 +2315,15 @@ if (typeof module !== "undefined" && module.exports) {
       return true;
     }
 
-    /** Lose when the guesses run out, or when the finish moves out of reach. */
+    /**
+     * The round ends when the guesses run out, and only then. Walking yourself
+     * somewhere the finish can no longer be reached from is worth a warning,
+     * not a closed door: the outcome is the same either way, and being cut off
+     * mid-walk by a number you cannot always see is no fun.
+     */
     settle() {
       if (this.status !== "playing") return;
-      if (this.left === 0 || this.toGo > this.left) this.status = "lost";
+      if (this.left === 0) this.status = "lost";
     }
 
     /** Border crossings taken beyond the shortest possible route. */
@@ -2568,6 +2576,7 @@ if (typeof module !== "undefined" && module.exports) {
     left: $("#count-left"),
     leftBox: $("#box-left"),
     toGo: $("#count-togo"),
+    toGoBox: $("#box-togo"),
     here: $("#count-here"),
     trail: $("#trail"),
     refusedWrap: $("#refused-wrap"),
@@ -2769,11 +2778,10 @@ if (typeof module !== "undefined" && module.exports) {
     el.toGo.textContent = game.difficulty.showDistance ? game.toGo : "?";
     el.here.textContent = E.nameOf(game.current);
     el.back.disabled = !game.canBack();
-    el.back.title = game.status !== "playing" || game.trail.length < 2
-      ? "Step back to the country you came from. Free."
-      : game.canBack()
-        ? "Step back to " + E.nameOf(game.trail[game.trail.length - 2]) + ". Free."
-        : "No room to go back — the finish would be further than your guesses can reach.";
+    el.back.title = game.canBack()
+      ? "Step back to " + E.nameOf(game.trail[game.trail.length - 2]) + ". Free."
+      : "Step back to the country you came from. Free.";
+    el.toGoBox.dataset.alarm = String(game.outOfReach);
   }
 
   function renderBrief() {
@@ -2970,16 +2978,15 @@ if (typeof module !== "undefined" && module.exports) {
     render();
 
     if (game.status === "won") speak("");
-    else if (game.status === "lost" && game.left > 0) {
-      speak("The finish is further away than your guesses can reach.", "miss");
+    else if (game.outOfReach) {
+      speak(E.nameOf(game.current) + " is further from the finish than your "
+        + game.left + (game.left === 1 ? " remaining guess" : " remaining guesses")
+        + " can carry you. Keep walking if you like — you have them to spend.", "miss");
     }
   }
 
   function stepBack() {
-    if (!game.back()) {
-      speak("No room to go back — the finish would be further than your guesses can reach.", "miss");
-      return;
-    }
+    if (!game.back()) return;
     log.push("<");
     justEntered = null;
     saveProgress();
