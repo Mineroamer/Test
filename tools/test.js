@@ -85,6 +85,27 @@ check("nonsense resolves to nothing", ["", "   ", "zzzz", "Atlantis", "42"].ever
 equal("a country's own name beats an alias", E.suggest("ni")[0], "NI");
 check("suggestions are capped", E.suggest("a", 4).length <= 4);
 
+/* Whatever the box understands, the list must offer first - otherwise pressing
+   Enter on "US" plays whatever happens to head the suggestions. */
+{
+  const disagreements = [];
+  for (const [code, country] of Object.entries(COUNTRIES)) {
+    for (const form of [country.name, code, ...(E.ALIASES[code] || [])]) {
+      const resolved = E.resolve(form);
+      const suggested = E.suggest(form)[0];
+      if (resolved && suggested && resolved !== suggested) {
+        disagreements.push(form + " -> " + resolved + " but suggests " + suggested);
+      }
+    }
+  }
+  equal("every name and code tops its own suggestion list", disagreements.length, 0,
+    disagreements.slice(0, 5).join("; "));
+  for (const [typed, expected] of [["US", "US"], ["PT", "PT"], ["NE", "NE"], ["CH", "CH"],
+                                   ["DE", "DE"], ["ZA", "ZA"], ["usa", "US"], ["uk", "GB"]]) {
+    equal("typing " + typed + " offers " + expected + " first", E.suggest(typed)[0], expected);
+  }
+}
+
 /* -------------------------------------------------------------- game rules */
 
 function newGame(start, end, difficulty) {
@@ -153,11 +174,47 @@ function newGame(start, end, difficulty) {
 
 {
   const game = newGame("PT", "IT");
-  equal("you can always go back to where you came from", game.back(), false);
+  equal("you cannot step back from the start", game.back(), false);
   game.play("Spain");
   check("once you have moved, Back works", game.back());
   equal("and puts you back at the start", game.current, "PT");
   equal("Back at the start does nothing", game.back(), false);
+}
+
+{
+  // Back is free, so it must never be the move that strands you: when
+  // retreating would put the finish out of reach, the way back closes.
+  const game = newGame("PT", "IT", "expert");
+  equal("Expert leaves little room", game.budget, 5);
+  game.play("Spain");
+  game.play("France");
+  equal("two guesses spent, three left", game.left, 3);
+  check("stepping back to Spain is still safe", game.canBack());
+  game.play("Germany");
+  game.play("Poland");
+  equal("four spent, one left", game.left, 1);
+  equal("but Poland is further out than that", game.toGo > game.left, true);
+  equal("so the round is already over", game.status, "lost");
+}
+
+{
+  const game = newGame("PT", "IT", "expert");
+  game.play("Spain");
+  game.play("France");
+  game.play("Germany");
+  equal("three guesses spent, two left", game.left, 2);
+  equal("Germany is two hops from Italy", game.toGo, 2);
+  check("backing up to France is safe - France is one hop out", game.canBack());
+  game.play("Austria");
+  equal("four spent, one left", game.left, 1);
+  equal("Austria borders Italy", game.toGo, 1);
+  equal("but Germany, behind you, does not", E.distance("DE", "IT"), 2);
+  equal("so the way back is closed rather than fatal", game.canBack(), false);
+  equal("and Back does nothing", game.back(), false);
+  equal("the round is still live", game.status, "playing");
+  equal("you are still in Austria", game.current, "AT");
+  game.play("Italy");
+  equal("and it can still be won", game.status, "won");
 }
 
 {
@@ -278,9 +335,96 @@ function newGame(start, end, difficulty) {
   check("the reset clock is inside a day", ms > 0 && ms <= 86400000, ms);
 }
 
-/* ------------------------------------------------------------------ output */
+/* ------------------------------------------------------- randomised rounds */
 
-equal("flags come from the iso code", E.flag("JP"), "\u{1F1EF}\u{1F1F5}");
+/*
+ * Play thousands of rounds with random input - real countries, neighbours,
+ * junk, and undo - and assert the things that must hold at every moment. This
+ * is what caught Back being able to strand the player.
+ */
+{
+  const modes = Object.keys(E.DIFFICULTIES);
+  const junk = ["", "   ", "Narnia", "zzz", "42", "!!!", "the", "a", null, undefined];
+  const seen = new Set();
+  const complain = (label, detail) => {
+    if (seen.has(label)) return;
+    seen.add(label);
+    check("fuzz: " + label, false, detail);
+  };
+  let won = 0;
+  let lost = 0;
+
+  for (let seed = 1; seed <= 2000; seed++) {
+    const rand = E.mulberry32(seed * 7919);
+    const mode = modes[Math.floor(rand() * modes.length)];
+    const puzzle = rand() < 0.5
+      ? E.puzzleForDay(Math.floor(rand() * 900), mode)
+      : E.randomPuzzle(mode, rand);
+    const game = new E.Game(puzzle, mode);
+    let guard = 0;
+
+    while (game.status === "playing" && guard++ < 200) {
+      if (game.used > game.budget) complain("budget exceeded", game.used + " > " + game.budget);
+      if (game.trail[0] !== game.start) complain("trail lost its start", game.trail.join(">"));
+      if (game.current !== game.trail[game.trail.length - 1]) complain("current is not the trail end", game.current);
+      if (new Set(game.trail).size !== game.trail.length) complain("a country repeats on the trail", game.trail.join(">"));
+      for (let i = 1; i < game.trail.length; i++) {
+        if (!E.neighbours(game.trail[i - 1]).has(game.trail[i])) {
+          complain("trail has a gap", game.trail[i - 1] + "->" + game.trail[i]);
+        }
+      }
+      if (game.toGo > game.left) complain("still playing with the finish out of reach", game.toGo + " > " + game.left);
+
+      const roll = rand();
+      if (roll < 0.06) {
+        const before = { used: game.used, trail: game.trail.join(">") };
+        const result = game.play(junk[Math.floor(rand() * junk.length)]);
+        if (result.ok) complain("junk was accepted", JSON.stringify(result));
+        if (game.used !== before.used) complain("junk cost a guess", before.used + " -> " + game.used);
+        if (game.trail.join(">") !== before.trail) complain("junk moved the player", game.trail.join(">"));
+      } else if (roll < 0.14 && game.trail.length > 1) {
+        const wasUsed = game.used;
+        const wasTrail = game.trail.join(">");
+        const allowed = game.canBack();
+        const did = game.back();
+        if (did !== allowed) complain("back disagreed with canBack", allowed + " vs " + did);
+        if (game.used !== wasUsed) complain("back cost a guess", wasUsed + " -> " + game.used);
+        if (!did && game.trail.join(">") !== wasTrail) complain("a refused back still moved the player", game.trail.join(">"));
+        if (did && game.toGo > game.left) complain("back stranded the player", game.trail.join(">"));
+      } else if (roll < 0.30) {
+        const all = Object.keys(COUNTRIES);
+        game.play(all[Math.floor(rand() * all.length)]);
+      } else {
+        const exits = game.exits();
+        const closer = exits.filter((c) => E.distance(c, game.end) < E.distance(game.current, game.end));
+        const pool = rand() < 0.7 && closer.length ? closer : exits;
+        const pick = pool[Math.floor(rand() * pool.length)];
+        const standing = game.current;
+        const result = game.play(pick);
+        if (!result.ok) complain("a neighbour was refused", standing + " -> " + pick);
+        else if (result.move === E.MOVE.MISS) complain("a neighbour counted as a miss", standing + " -> " + pick);
+      }
+    }
+
+    if (guard >= 200) complain("round never ended", mode + " " + game.start + "->" + game.end);
+    if (game.status === "won") {
+      won++;
+      if (game.current !== game.end) complain("won without arriving", game.current);
+      if (game.overshoot() < 0) complain("overshoot below zero", String(game.overshoot()));
+    } else if (game.status === "lost") {
+      lost++;
+      if (game.current === game.end) complain("lost while standing at the finish", game.trail.join(">"));
+      if (game.left > 0 && game.toGo <= game.left) complain("lost with a route still open", game.toGo + " <= " + game.left);
+    } else {
+      complain("round left hanging", game.status);
+    }
+    if (game.play("Spain").ok) complain("a finished round still takes guesses", game.status);
+    if (game.back()) complain("a finished round can still step back", game.status);
+  }
+
+  check("2000 random rounds all reached an ending", won + lost === 2000, won + " won, " + lost + " lost");
+  check("random play wins sometimes and loses sometimes", won > 200 && lost > 200, won + "/" + lost);
+}
 
 console.log(passed + " checks passed" + (failures.length ? ", " + failures.length + " FAILED" : ""));
 if (failures.length) {

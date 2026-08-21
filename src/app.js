@@ -67,6 +67,7 @@
   let justEntered = null;
   let options = [];
   let highlighted = -1;
+  let highlightPicked = false; // true once the player arrows to a choice themselves
 
   /* ------------------------------------------------------------------ theme */
 
@@ -170,17 +171,31 @@
 
   /* ----------------------------------------------------------------- render */
 
-  function chip(list, code, role, note) {
+  /**
+   * One country on a list. A hop marker, where there is one, lives inside the
+   * same item as the country it leads to, so it can never be split from it by
+   * a line wrap.
+   */
+  function chip(list, code, role, note, hop) {
     const li = document.createElement("li");
     if (role) li.dataset.role = role;
+    if (hop) {
+      const mark = document.createElement("i");
+      mark.className = "hop";
+      mark.textContent = hop;
+      li.appendChild(mark);
+    }
+    const box = document.createElement("span");
+    box.className = "chip";
     const name = document.createElement("span");
     name.textContent = E.nameOf(code);
-    li.appendChild(name);
+    box.appendChild(name);
     if (note) {
       const tag = document.createElement("b");
       tag.textContent = note;
-      li.appendChild(tag);
+      box.appendChild(tag);
     }
+    li.appendChild(box);
     list.appendChild(li);
     return li;
   }
@@ -188,20 +203,16 @@
   function renderTrail() {
     el.trail.textContent = "";
     game.trail.forEach((code, i) => {
-      if (i > 0) {
-        const link = E.linkBetween(game.trail[i - 1], code);
-        const arrow = document.createElement("li");
-        arrow.className = "hop";
-        arrow.dataset.kind = link ? "jump" : "border";
-        arrow.textContent = link ? link.label : "";
-        el.trail.appendChild(arrow);
-      }
+      // Only the Bering hop gets a marker. A plain border needs none: the
+      // order of the chips already says you walked from one to the next.
+      const link = i > 0 ? E.linkBetween(game.trail[i - 1], code) : null;
+      const hop = link ? link.label : null;
       const role = code === game.current ? "here" : i === 0 ? "start" : "step";
       const note = i === 0 ? "start" : code === game.end ? "finish" : "";
-      chip(el.trail, code, role, note);
+      chip(el.trail, code, role, note, hop);
     });
 
-    const misses = game.moves.filter((m) => m.move === "miss");
+    const misses = game.moves.filter((m) => m.move === E.MOVE.MISS);
     el.refusedWrap.hidden = misses.length === 0;
     el.refused.textContent = "";
     for (const miss of misses) chip(el.refused, miss.code, "miss", "");
@@ -212,7 +223,12 @@
     el.leftBox.dataset.alarm = String(game.status === "playing" && game.left <= 2);
     el.toGo.textContent = game.difficulty.showDistance ? game.toGo : "?";
     el.here.textContent = E.nameOf(game.current);
-    el.back.disabled = game.status !== "playing" || game.trail.length < 2;
+    el.back.disabled = !game.canBack();
+    el.back.title = game.status !== "playing" || game.trail.length < 2
+      ? "Step back to the country you came from. Free."
+      : game.canBack()
+        ? "Step back to " + E.nameOf(game.trail[game.trail.length - 2]) + ". Free."
+        : "No room to go back — the finish would be further than your guesses can reach.";
   }
 
   function renderBrief() {
@@ -317,6 +333,8 @@
   function closeSuggestions() {
     options = [];
     highlighted = -1;
+    highlightPicked = false;
+    el.field.removeAttribute("aria-activedescendant");
     el.suggest.textContent = "";
     el.suggest.hidden = true;
     el.field.setAttribute("aria-expanded", "false");
@@ -331,6 +349,7 @@
       return;
     }
     highlighted = 0;
+    highlightPicked = false;
     options.forEach((code, i) => {
       const li = document.createElement("li");
       li.id = "opt-" + code;
@@ -342,7 +361,9 @@
       plate.className = "plate";
       plate.textContent = code;
       li.append(name, plate);
-      li.addEventListener("mousedown", (event) => {
+      // pointerdown, not mousedown: on touch the field blurs and closes the
+      // list before a mouse event would ever land.
+      li.addEventListener("pointerdown", (event) => {
         event.preventDefault();
         submit(code);
       });
@@ -350,10 +371,12 @@
     });
     el.suggest.hidden = false;
     el.field.setAttribute("aria-expanded", "true");
+    el.field.setAttribute("aria-activedescendant", "opt-" + options[highlighted]);
   }
 
   function moveHighlight(step) {
     if (!options.length) return;
+    highlightPicked = true;
     highlighted = (highlighted + step + options.length) % options.length;
     [...el.suggest.children].forEach((li, i) => li.setAttribute("aria-selected", String(i === highlighted)));
     el.field.setAttribute("aria-activedescendant", "opt-" + options[highlighted]);
@@ -408,7 +431,10 @@
   }
 
   function stepBack() {
-    if (!game.back()) return;
+    if (!game.back()) {
+      speak("No room to go back — the finish would be further than your guesses can reach.", "miss");
+      return;
+    }
     log.push("<");
     justEntered = null;
     saveProgress();
@@ -479,6 +505,7 @@
 
   function boot() {
     initTheme();
+    pruneSaves();
     world = new window.WorldMap(el.svg);
     startMode(currentDifficulty());
     buildDifficulty();
@@ -495,9 +522,18 @@
       if (event.key === "ArrowDown") { event.preventDefault(); moveHighlight(1); }
       else if (event.key === "ArrowUp") { event.preventDefault(); moveHighlight(-1); }
       else if (event.key === "Escape") closeSuggestions();
-      else if (event.key === "Enter" && options.length && highlighted >= 0) {
-        event.preventDefault();
-        submit(options[highlighted]);
+      else if (event.key === "Enter") {
+        // What you typed wins over the top of the list, unless you picked a
+        // row yourself: typing "US" must play the United States, not whatever
+        // happens to head the suggestions.
+        const typed = E.resolve(el.field.value);
+        if (!highlightPicked && typed) {
+          event.preventDefault();
+          submit(typed);
+        } else if (options.length && highlighted >= 0) {
+          event.preventDefault();
+          submit(options[highlighted]);
+        }
       }
     });
 
@@ -514,6 +550,31 @@
       clearTimeout(resizeTimer);
       resizeTimer = setTimeout(() => world.frame([game.start, game.end, ...game.trail], false), 180);
     });
+
+    // A page left open past midnight is showing yesterday's round. Swap it for
+    // the new one, but never in the middle of a walk.
+    let today = E.dayNumber();
+    setInterval(() => {
+      const now = E.dayNumber();
+      if (now === today) return;
+      today = now;
+      if (!game.puzzle.daily || game.status === "playing") return;
+      startMode(game.difficultyKey);
+      speak("A new day: today's " + game.difficulty.label + " route is ready.");
+    }, 30000);
+  }
+
+  /** Yesterday's saved rounds are dead weight; keep the last few days only. */
+  function pruneSaves() {
+    const today = E.dayNumber();
+    try {
+      for (const key of Object.keys(localStorage)) {
+        const match = key.match(/^travle\.day\.(-?\d+)\./);
+        if (match && today - Number(match[1]) > 3) localStorage.removeItem(key);
+      }
+    } catch (err) {
+      /* nothing readable to prune */
+    }
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);

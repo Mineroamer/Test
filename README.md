@@ -17,7 +17,9 @@ that borders the one you are standing in and you move into it. Name one that
 does not and you stay put, one guess the poorer.
 
 - **Back** returns you to the country you came from. It is free, and you can
-  keep going back as far as the start.
+  keep going back as far as the start. It closes off when retreating would put
+  the finish further away than your remaining guesses can carry you — a free
+  move must never be the one that strands you.
 - Naming a country already on your trail also walks you back to it — that one
   costs a guess.
 - The map carries no labels. Recognising the shapes is half the game.
@@ -75,7 +77,7 @@ tools/bundle.js       inlines everything into dist/travle-overland.html
 ## Working on it
 
 ```sh
-node tools/test.js      # 3199 checks: border data, name parsing, game rules, dailies
+node tools/test.js      # 3226 checks: border data, name parsing, game rules, dailies
 node tools/bundle.js    # rebuild the single-file version
 ```
 
@@ -83,6 +85,13 @@ The test suite checks every border is mutual, spot-checks well-known border
 counts (China 14, Brazil 9, Portugal 1…), and plays whole rounds through the
 engine — including winning across the Bering Strait, stepping back, and being
 stranded when the finish drifts out of reach.
+
+It finishes by fuzzing 2000 random rounds — real countries, neighbours, junk
+input and undo — asserting the invariants that must hold at every moment: the
+trail is always an unbroken chain of borders starting at the start, guesses
+never exceed the budget, rejected input never costs anything or moves anyone,
+and a round is never left playable once the finish is out of reach. That last
+one is what caught Back being able to strand the player.
 
 ### Regenerating the map
 

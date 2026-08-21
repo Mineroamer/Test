@@ -328,7 +328,7 @@ button, input, textarea { font: inherit; color: inherit; }
 .country[data-state="trail"] { fill: var(--trail-fill); stroke: var(--accent); }
 .country[data-state="here"] { fill: var(--accent); stroke: var(--ink); stroke-width: 1.4; }
 .country[data-state="finish"] { fill: var(--surface-sunk); stroke: var(--ink); stroke-width: 1.4; stroke-dasharray: 4 3; }
-.country[data-state="finish-open"] { fill: var(--accent); stroke: var(--ink); stroke-width: 1.4; }
+.country[data-state="finish-open"] { fill: var(--near-wash); stroke: var(--near); stroke-width: 1.8; stroke-dasharray: 4 3; }
 .country[data-state="missed"] { fill: var(--off-wash); stroke: var(--off); }
 .country[data-state="answer"] { fill: var(--near-wash); stroke: var(--near); stroke-width: 1.1; stroke-dasharray: 3 2; }
 
@@ -593,6 +593,12 @@ button, input, textarea { font: inherit; color: inherit; }
 
 .trail li {
   display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.trail .chip {
+  display: inline-flex;
   align-items: baseline;
   gap: 7px;
   padding: 5px 10px;
@@ -603,7 +609,7 @@ button, input, textarea { font: inherit; color: inherit; }
   font-size: 14px;
 }
 
-.trail li b {
+.trail .chip b {
   font-family: var(--mono);
   font-size: 9px;
   font-weight: 600;
@@ -612,22 +618,33 @@ button, input, textarea { font: inherit; color: inherit; }
   opacity: 0.75;
 }
 
-.trail li[data-role="start"] { border-color: var(--ink); }
-.trail li[data-role="step"] { background: var(--accent-wash); border-color: var(--accent); color: var(--accent-deep); }
-.trail li[data-role="here"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-variation-settings: "wdth" 105, "wght" 700; }
-.trail li[data-role="miss"] { background: var(--off-wash); border-color: var(--off); color: var(--off); text-decoration: line-through; }
+.trail li[data-role="start"] .chip { border-color: var(--ink); }
 
-.trail .hop {
-  border: 0;
-  background: none;
-  padding: 0 1px;
-  color: var(--rule-firm);
-  font-size: 15px;
+.trail li[data-role="step"] .chip {
+  background: var(--accent-wash);
+  border-color: var(--accent);
+  color: var(--accent-deep);
 }
 
-.trail .hop[data-kind="border"]::before { content: "\203A"; }
+.trail li[data-role="here"] .chip {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  font-variation-settings: "wdth" 105, "wght" 700;
+}
 
-.trail .hop[data-kind="jump"] {
+.trail li[data-role="miss"] .chip {
+  background: var(--off-wash);
+  border-color: var(--off);
+  color: var(--off);
+  text-decoration: line-through;
+}
+
+/* The only hop worth marking: the Bering crossing. A plain land border needs
+   no marker, because the order of the chips already carries it. */
+.trail .hop {
+  font-style: normal;
+  line-height: 1;
   color: var(--bering);
   border: 1px dashed var(--bering);
   background: var(--bering-wash);
@@ -639,6 +656,7 @@ button, input, textarea { font: inherit; color: inherit; }
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
+
 
 /* --------------------------------------------------------------- outcome */
 

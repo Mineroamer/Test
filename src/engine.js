@@ -62,6 +62,9 @@
       if (key && !NAME_INDEX.has(key)) NAME_INDEX.set(key, code);
     }
     SEARCH_TERMS.push({ code, term: normalise(country.name), alias: false });
+    // The ISO code has to be searchable too, or typing "US" offers Russia
+    // (from the USSR alias) and "PT" offers Egypt.
+    SEARCH_TERMS.push({ code, term: normalise(code), alias: true });
     for (const alias of ALIASES[code] || []) {
       SEARCH_TERMS.push({ code, term: normalise(alias), alias: true });
     }
@@ -408,9 +411,20 @@
       return { ok: true, code, from, move, link: linkBetween(from, code), status: this.status };
     }
 
+    /**
+     * Can you step back right now? Not at the start, and not when retreating
+     * would put the finish further away than your remaining guesses can carry
+     * you - Back is free, so it must never be the move that strands you.
+     */
+    canBack() {
+      if (this.status !== "playing" || this.trail.length < 2) return false;
+      const previous = this.trail[this.trail.length - 2];
+      return distance(previous, this.end) <= this.left;
+    }
+
     /** Free undo: return to the country you were on before this one. */
     back() {
-      if (this.status !== "playing" || this.trail.length < 2) return false;
+      if (!this.canBack()) return false;
       this.trail.pop();
       return true;
     }
@@ -434,12 +448,6 @@
 
   /* ------------------------------------------------------------------ misc. */
 
-  function flag(code) {
-    return String.fromCodePoint(
-      ...code.split("").map((ch) => 0x1f1e6 + ch.charCodeAt(0) - 65)
-    );
-  }
-
   function nameOf(code) {
     return COUNTRIES[code] ? COUNTRIES[code].name : code;
   }
@@ -447,7 +455,7 @@
   return {
     COUNTRIES, SPECIAL_LINKS, ALIASES, ADJ, LINKED, HEADLINERS, PAIRS, DIFFICULTIES, MOVE,
     DEFAULT_MODE, Game, bfs, distance, distancesFrom, shortestRoute, neighbours, linkBetween,
-    resolve, suggest, normalise, flag, nameOf, dayNumber, puzzleForDay, randomPuzzle, mulberry32,
+    resolve, suggest, normalise, nameOf, dayNumber, puzzleForDay, randomPuzzle, mulberry32,
     poolFor, dealFor, msUntilReset,
   };
 });
