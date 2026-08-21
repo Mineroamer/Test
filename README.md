@@ -21,6 +21,11 @@ does not and you stay put, one guess the poorer.
 - Naming a country already on your trail also walks you back to it — that one
   costs a guess.
 - The map carries no labels. Recognising the shapes is half the game.
+- Drag the map to move it, and scroll, pinch, or use the buttons to zoom in on
+  a crowded border. Everything drawn on top of the map holds its size on
+  screen, so zooming shows more coastline rather than bigger markers. **Fit**
+  puts the whole route back in view and hands the framing back to the game,
+  which otherwise follows your trail only until you move the view yourself.
 - The round ends when your guesses run out, and only then. If you walk
   somewhere the finish can no longer be reached from, the game says so and
   flags the counter — but the guesses are yours to spend however you like.
@@ -95,7 +100,7 @@ and a lost round always has an empty counter behind it.
 
 `data/map.js` is generated, not written. The outlines come from Natural Earth
 1:50m by way of the `world-atlas` package, projected with Equal Earth and
-simplified to about 130 KB:
+simplified to about 320 KB:
 
 ```sh
 npm install world-atlas@2 topojson-client@3
@@ -106,6 +111,10 @@ Natural Earth is public domain. Countries too small to see at this scale get a
 ring marker instead of a shape; Tuvalu has no outline at 1:50m, and no land
 borders either, so it never appears on a route.
 
+The simplification tolerance in `tools/build-map.js` and the zoom limit in
+`src/map.js` are a pair: the outlines are kept fine enough to hold their shape
+at the closest zoom the map allows. Loosening one means tightening the other.
+
 ## Design notes
 
 Cool survey-paper greys with a deep teal ink. Teal marks everything you have
@@ -113,4 +122,5 @@ walked; a single rose is reserved for the Bering Strait, so the house rule
 reads as the one wild card on the board. Type is Archivo used across its width
 axis — expanded and heavy for the two place names — with IBM Plex Mono for
 codes and counters. The map re-frames itself around your route, so a walk
-across Europe is not shown at the same scale as one across Eurasia.
+across Europe is not shown at the same scale as one across Eurasia, and hands
+control to you the moment you drag or zoom it.

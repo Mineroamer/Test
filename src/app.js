@@ -14,6 +14,9 @@
     toName: $("#to-name"),
     par: $("#par"),
     svg: $("#map"),
+    zoomIn: $("#zoom-in"),
+    zoomOut: $("#zoom-out"),
+    zoomFit: $("#zoom-fit"),
     form: $("#console"),
     field: $("#field"),
     submit: $("#submit"),
@@ -311,6 +314,10 @@
     return "A new " + game.difficulty.label + " route in " + when + ". The other levels are waiting now.";
   }
 
+  function routeCodes() {
+    return [game.start, game.end, ...game.trail];
+  }
+
   function render(reframe) {
     renderBrief();
     renderCounters();
@@ -318,7 +325,10 @@
     renderOutcome();
     paintDifficulty();
     world.paint(game, justEntered, game.status === "lost" ? game.solution() : null);
-    world.frame([game.start, game.end, ...game.trail], !reframe);
+    // A new round always reframes; during a round the map follows the trail
+    // only while the player has not taken the view over themselves.
+    if (reframe) world.fit(routeCodes(), false);
+    else world.follow(routeCodes());
     if (game.status === "playing") el.field.focus();
   }
 
@@ -544,10 +554,14 @@
       speak("Unlimited. Play as many as you like.");
     });
 
+    el.zoomIn.addEventListener("click", () => world.zoomBy(1.5));
+    el.zoomOut.addEventListener("click", () => world.zoomBy(1 / 1.5));
+    el.zoomFit.addEventListener("click", () => world.fit(routeCodes(), true));
+
     let resizeTimer = null;
     window.addEventListener("resize", () => {
       clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(() => world.frame([game.start, game.end, ...game.trail], false), 180);
+      resizeTimer = setTimeout(() => world.onResize(routeCodes()), 180);
     });
 
     // A page left open past midnight is showing yesterday's round. Swap it for

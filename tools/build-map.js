@@ -98,8 +98,8 @@ function project(lon, lat) {
 
 /* ------------------------------------------------------------ path writing */
 
-const PRECISION = 1;
-const TOLERANCE = 0.7; // screen units; coastline detail finer than this goes
+const PRECISION = 2;
+const TOLERANCE = 0.15; // screen units; fine enough to hold up under the map's full zoom
 const round = (n) => Math.round(n * 10 ** PRECISION) / 10 ** PRECISION;
 
 /** Perpendicular distance from p to the line ab, squared. */

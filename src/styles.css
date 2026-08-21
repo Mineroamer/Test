@@ -294,6 +294,7 @@ button, input, textarea { font: inherit; color: inherit; }
 /* ------------------------------------------------------------------- map */
 
 .map-frame {
+  position: relative;
   background: var(--sea);
   border: 1px solid var(--rule-firm);
   border-radius: var(--radius);
@@ -306,7 +307,43 @@ button, input, textarea { font: inherit; color: inherit; }
   width: 100%;
   aspect-ratio: 1000 / 430;
   background: var(--sea);
+  cursor: grab;
+  touch-action: none; /* the map takes the gesture, not the page */
 }
+
+#map.is-dragging { cursor: grabbing; }
+#map:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.map-controls {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.map-controls button {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  cursor: pointer;
+  border: 1px solid var(--rule-firm);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+  box-shadow: var(--shadow);
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.map-controls button:last-child { font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; }
+.map-controls button:hover { border-color: var(--accent); color: var(--accent); }
 
 .sea { fill: var(--sea); }
 
@@ -332,6 +369,9 @@ button, input, textarea { font: inherit; color: inherit; }
 .country[data-state="missed"] { fill: var(--off-wash); stroke: var(--off); }
 .country[data-state="answer"] { fill: var(--near-wash); stroke: var(--near); stroke-width: 1.1; stroke-dasharray: 3 2; }
 
+/* Specks and markers sit in groups scaled by the zoom, so their radii are in
+   screen pixels and they never grow as you zoom in. Strokes are already
+   non-scaling, so they stay true for free. */
 .speck {
   fill: none;
   stroke: var(--land-line);
@@ -381,7 +421,7 @@ button, input, textarea { font: inherit; color: inherit; }
 }
 
 .bering[data-used="true"] .bering-line { stroke-width: 2.6; opacity: 1; }
-.bering[data-used="true"] .bering-ring { opacity: 1; stroke-width: 1.6; animation: ping 2.4s ease-out infinite; transform-origin: center; transform-box: fill-box; }
+.bering[data-used="true"] .bering-ring { opacity: 1; stroke-width: 1.6; animation: ping 2.4s ease-out infinite; transform-origin: center; }
 
 /* ---------------------------------------------------------------- legend */
 
@@ -402,6 +442,13 @@ button, input, textarea { font: inherit; color: inherit; }
 }
 
 .legend li { display: flex; align-items: center; gap: 6px; }
+
+.legend .legend-hint {
+  margin-left: auto;
+  color: var(--rule-firm);
+}
+
+.legend .legend-hint::before { display: none; }
 
 .legend li::before {
   content: "";
@@ -797,6 +844,7 @@ button, input, textarea { font: inherit; color: inherit; }
   .page { padding: 18px 14px 56px; gap: 18px; }
   #map { aspect-ratio: 4 / 3; }
   .counters { grid-template-columns: 1fr 1fr; }
+  .legend-hint { display: none; }
   .counter-wide { grid-column: 1 / -1; }
   .objective { grid-template-columns: 1fr; gap: 2px; }
   .objective-rule { display: none; }

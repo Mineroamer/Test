@@ -37,12 +37,18 @@
 
   <section class="map-frame" aria-label="Map">
     <svg id="map"></svg>
+    <div class="map-controls">
+      <button type="button" id="zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
+      <button type="button" id="zoom-out" title="Zoom out" aria-label="Zoom out">&#8722;</button>
+      <button type="button" id="zoom-fit" title="Frame the whole route" aria-label="Frame the whole route">Fit</button>
+    </div>
     <ul class="legend">
       <li data-key="start">Start</li>
       <li data-key="here">You are here</li>
       <li data-key="trail">Countries crossed</li>
       <li data-key="finish">Finish</li>
       <li data-key="bering">Bering crossing</li>
+      <li class="legend-hint">Drag to move · scroll to zoom</li>
     </ul>
   </section>
 
@@ -107,6 +113,7 @@
         <li><strong>Back</strong> returns you to the country you came from. It is free, and you can keep going back as far as the start.</li>
         <li>Naming a country already on your trail also walks you back to it — that one costs a guess.</li>
         <li>The map is unlabelled on purpose. Every country you have crossed is filled in; the ringed country is the finish.</li>
+        <li>Drag the map to move it and scroll, pinch or use the buttons to zoom in on a crowded border. <strong>Fit</strong> puts the whole route back in view and hands the framing back to the game.</li>
         <li>The round ends when your guesses run out, and only then. Walk somewhere the finish can no longer be reached from and the game says so, but the guesses are yours to spend however you like.</li>
       </ul>
       <p><strong>Four levels.</strong> Scenic, Standard and Expert are daily: each deals its own route for the day, keeps its own streak, and resets at midnight your time. Finishing one leaves the other two untouched — they are three different walks, not the same walk at three settings. Unlimited is off the clock: a fresh route as often as you like.</p>
