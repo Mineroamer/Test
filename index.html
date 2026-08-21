@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Travle Overland</title>
+<meta name="description" content="Walk from one country to another across land borders, one neighbour at a time - with one shortcut across the Bering Strait.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%276%27 fill=%27%230b6e75%27/%3E%3Cpath d=%27M7 24 L14 12 L21 18 L26 8%27 fill=%27none%27 stroke=%27%23fff%27 stroke-width=%273%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27/%3E%3Ccircle cx=%277%27 cy=%2724%27 r=%273.2%27 fill=%27%23fff%27/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,400..800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="src/styles.css">
+</head>
+<body>
+<main class="page">
+
+  <header class="masthead">
+    <h1 class="wordmark">Travle<em>Overland</em></h1>
+    <div class="masthead-side">
+      <span class="plate" id="puzzle-no">No. —</span>
+      <button type="button" class="chip-button" id="theme">Night</button>
+    </div>
+  </header>
+
+  <section class="objective">
+    <div class="terminus">
+      <span class="terminus-label">From</span>
+      <strong id="from-name">—</strong>
+    </div>
+    <div class="objective-rule" aria-hidden="true"></div>
+    <div class="terminus terminus-end">
+      <span class="terminus-label">To</span>
+      <strong id="to-name">—</strong>
+    </div>
+    <p class="par plate" id="par"></p>
+  </section>
+
+  <section class="map-frame" aria-label="Map">
+    <svg id="map"></svg>
+    <ul class="legend">
+      <li data-key="start">Start</li>
+      <li data-key="here">You are here</li>
+      <li data-key="trail">Countries crossed</li>
+      <li data-key="finish">Finish</li>
+      <li data-key="bering">Bering crossing</li>
+    </ul>
+  </section>
+
+  <div class="difficulty" id="difficulty" role="group" aria-label="Difficulty"></div>
+
+  <form class="console" id="console" autocomplete="off">
+    <div class="console-row">
+      <label class="sr-only" for="field">Name a country that borders the one you are standing in</label>
+      <input class="field" id="field" type="text" placeholder="Name a bordering country…"
+             role="combobox" aria-haspopup="listbox" aria-controls="suggest" aria-expanded="false"
+             aria-autocomplete="list" spellcheck="false">
+      <button class="go" id="submit" type="submit">Cross</button>
+      <button class="go ghost" id="back" type="button" title="Step back to the country you came from. Free.">Back</button>
+    </div>
+    <ul class="suggest" id="suggest" role="listbox" aria-label="Matching countries" hidden></ul>
+    <p class="say" id="say" role="status" aria-live="polite"></p>
+  </form>
+
+  <dl class="counters">
+    <div class="counter" id="box-left">
+      <dt>Guesses left</dt>
+      <dd id="count-left">0</dd>
+    </div>
+    <div class="counter">
+      <dt>Borders to go</dt>
+      <dd id="count-togo">0</dd>
+    </div>
+    <div class="counter counter-wide">
+      <dt>Standing in</dt>
+      <dd id="count-here" class="counter-name">—</dd>
+    </div>
+  </dl>
+
+  <section class="ledger">
+    <h2>Your trail</h2>
+    <ol class="trail" id="trail"></ol>
+  </section>
+
+  <section class="ledger" id="refused-wrap" hidden>
+    <h2>Turned back</h2>
+    <ul class="trail refused" id="refused"></ul>
+  </section>
+
+  <section class="outcome" id="outcome" hidden>
+    <h2>Result</h2>
+    <p class="verdict" id="verdict"></p>
+    <p id="blurb"></p>
+    <div class="tally" id="tally"></div>
+    <p class="reset-note plate" id="reset" hidden></p>
+    <div class="actions">
+      <button type="button" class="go" id="share">Copy result</button>
+      <button type="button" class="go ghost" id="again">Play unlimited</button>
+    </div>
+    <textarea class="field" id="share-box" rows="4" readonly hidden aria-label="Result text"></textarea>
+  </section>
+
+  <details class="rules">
+    <summary>How to play</summary>
+    <div class="rules-body">
+      <p>You start in one country and have to reach another on foot. Name a country that borders the one you are standing in and you move into it, and it lights up on the map. Name one that does not and you stay put, a guess the poorer.</p>
+      <ul>
+        <li><strong>Back</strong> returns you to the country you came from. It is free, and you can keep going back as far as the start.</li>
+        <li>Naming a country already on your trail also walks you back to it — that one costs a guess.</li>
+        <li>The map is unlabelled on purpose. Every country you have crossed is filled in; the ringed country is the finish.</li>
+        <li>Run out of guesses, or wander so far that the finish is out of reach, and you are stranded.</li>
+      </ul>
+      <p><strong>Four levels.</strong> Scenic, Standard and Expert are daily: each deals its own route for the day, keeps its own streak, and resets at midnight your time. Finishing one leaves the other two untouched — they are three different walks, not the same walk at three settings. Unlimited is off the clock: a fresh route as often as you like.</p>
+      <div class="house">
+        <p><strong>The Bering rule.</strong> Russia and the United States count as neighbours. It is the only way the Americas join the rest of the board, and the map marks the crossing with a dashed line at the strait.</p>
+      </div>
+      <p><strong>What counts as a border:</strong> two countries border each other when their main landmasses touch. Exclaves and overseas territory are out, so Spain does not border Morocco and France does not border Brazil.</p>
+      <p><strong>How the levels differ:</strong> Scenic walks 4 to 5 borders and gives you par plus eight guesses. Standard walks 5 to 6 with par plus five. Expert walks 6 to 7 with par plus two, and never tells you how far you still have to go.</p>
+    </div>
+  </details>
+
+  <p class="colophon">A new route every day · 197 countries · outlines from Natural Earth</p>
+
+</main>
+
+<script src="data/countries.js"></script>
+<script src="data/map.js"></script>
+<script src="src/engine.js"></script>
+<script src="src/map.js"></script>
+<script src="src/app.js"></script>
+</body>
+</html>
