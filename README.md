@@ -42,6 +42,8 @@ needs no sign-up, and cannot rot.
 | **Connections** — sixteen words, four groups | ✓ | ✓ | ✓ |
 | **Spelling Bee** — seven letters, one compulsory | ✓ | ✓ | |
 | **Letter Boxed** — twelve letters, four sides | ✓ | ✓ | |
+| **The Crossword** — a full 15×15 | ✓ | ✓ | |
+| **The Mini** — 5×5 | ✓ | ✓ | |
 | **Travle Overland** — walk between two countries | ✓ | ✓ | ✓ |
 
 Travle Overland came first, as a standalone game. Its engine and its map are
@@ -77,6 +79,7 @@ tiers feed which game is the main lever on how fair each game feels:
 | `bee-words.json` | Words of 4+ letters using ≤7 distinct letters | 41,985 |
 | `bee-puzzles.json` | Letter sets, each with a pangram and 20–90 words | 33,385 |
 | `boxed-words.json` | Common words of 3+ letters | 42,441 |
+| `crossword-clues.json` | Answers with a clue, from WordNet definitions | 41,313 |
 | `connections-groups.js` | Hand-written categories, four difficulty tiers | 124 |
 
 Connections categories are hand-written, because a category is a judgement
@@ -88,6 +91,28 @@ Every Letter Boxed puzzle is built around a solution rather than scattered and
 hoped over: two words that chain and between them use exactly twelve distinct
 letters, with the letters then placed so neither word ever steps twice on the
 same side. Every box that ships is solvable in two words.
+
+### The crosswords
+
+Both sizes are generated, not drawn. First a pattern of black squares, under
+the rules a solver expects — 180° symmetry, no word shorter than three letters,
+every white square in both an across and a down word, and the white area all
+one piece. Then a fill: a backtracking search that always works on the most
+constrained slot first, so a dead end shows up in a few moves rather than after
+committing to half a grid.
+
+The filler is only ever offered words that have a clue, so a finished grid can
+always be clued end to end. Clues are WordNet definitions — the honest
+constraint being that they read like a dictionary rather than a setter, which
+buys tens of thousands of clueable answers in exchange.
+
+Two things keep it from ever hanging or coming back empty. The search has a
+wall-clock deadline as well as a step budget, and the deadline *latches* — the
+first version re-tested the clock on one call in sixty-four and let the other
+sixty-three carry on working, which meant a 2-second budget could run for 32
+seconds. And rather than one black-square density there is a ladder: an open
+grid makes the better puzzle so it is tried first, and each rung up adds black
+squares and makes the fill easier. A 15×15 lands in about a second.
 
 ## The server is the referee
 
@@ -141,6 +166,7 @@ public/                the browser app: no build step, no framework
 tests/run.js           52 tests over the real HTTP server
 scripts/build-data.mjs regenerates data/ from the source word lists
 scripts/build-artifact.mjs packs everything into one static HTML file
+scripts/check-hoisting.mjs catches helpers used before they exist
 ```
 
 `public/js/local-api.js` is the whole of what the single-page build changes:
@@ -168,9 +194,18 @@ the home screen is the real time until that happens.
 npm test
 ```
 
-52 end-to-end tests against the real HTTP server: sessions, resuming a round,
+59 end-to-end tests against the real HTTP server: sessions, resuming a round,
 whether an answer leaks before it should, whether a finished round can be
-counted twice, and each game played to a win.
+counted twice, whether two people racing for one username can both have it,
+and each game played to a win.
+
+`npm run check` runs first and catches one specific mistake this codebase kept
+making. The view modules set everything up, call `paint()`, return their
+interface, and declare their helpers below. Function declarations hoist so that
+works; an arrow assigned to a `const` does not, and calling one early throws at
+runtime, in a browser, taking the whole screen down. It slipped through twice.
+The check follows what setup actually reaches — transitively, since both real
+cases were a helper called by `paint()` rather than by the factory itself.
 
 ## Putting it on the internet
 

@@ -300,9 +300,19 @@ export const api = {
     return { result, run: view(run) };
   },
 
-  hint: async (id) => {
+  hint: async (id, at) => {
     const run = getRun(id);
-    const result = games[run.game].hint(puzzleFor(run), run.state);
+    const result = games[run.game].hint(puzzleFor(run), run.state, at);
+    if (result.ok) settle(run);
+    save();
+    return { result, run: view(run) };
+  },
+
+  check: async (id, cells) => {
+    const run = getRun(id);
+    const game = games[run.game];
+    if (!game.check) throw new ApiError(400, "There is nothing to check in this game.");
+    const result = game.check(puzzleFor(run), run.state, cells);
     save();
     return { result, run: view(run) };
   },

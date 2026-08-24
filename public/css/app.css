@@ -23,40 +23,48 @@
 :root {
   color-scheme: light;
 
-  --ground: #e2e8e6;
-  --surface: #f7faf9;
-  --surface-sunk: #edf2f0;
+  /* Neutrals carry a green-blue bias taken from the accent, so the greys read
+   * as chosen rather than inherited - the paper a survey is printed on, not
+   * the default of a browser. */
+  --ground: #dde6e4;
+  --surface: #f4f9f8;
+  --surface-sunk: #e7efed;
   --surface-raised: #ffffff;
-  --ink: #0d1b1e;
-  --ink-soft: #35494b;
-  --muted: #5a6f70;
-  --rule: #c2d0cd;
-  --rule-firm: #a8bcb8;
+  --ink: #071619;
+  --ink-soft: #2c4144;
+  --muted: #55696b;
+  --rule: #c6d4d1;
+  --rule-firm: #a4b9b5;
 
   --accent: #0b6e75;
   --accent-ink: #ffffff;
-  --accent-wash: #cfe4e3;
-  --accent-deep: #08535a;
+  --accent-wash: #cee3e2;
+  --accent-deep: #064a50;
 
-  --ok: #2f7d51;
-  --ok-wash: #d5e9dd;
-  --near: #8d6510;
-  --near-wash: #f4e7c9;
-  --off: #a2393a;
-  --off-wash: #f4dcdc;
-  --blank: #98a9a7;
+  --ok: #1f7a4d;
+  --ok-wash: #d2e8dc;
+  --near: #8a6108;
+  --near-wash: #f3e5c4;
+  --off: #a3322f;
+  --off-wash: #f4d9d8;
+  --blank: #91a4a2;
 
-  /* One hue per game, used through --game. */
-  --game-wordle: #2f7d51;
-  --game-connections: #6d4aa8;
-  --game-bee: #b07a09;
-  --game-boxed: #1f6a9c;
+  /* One hue per game, spaced around the wheel so seven tiles never blur into
+   * each other. Used through --game, which each screen sets on a wrapper. */
+  --game-wordle: #1f7a4d;
+  --game-connections: #6b46b0;
+  --game-bee: #b8790a;
+  --game-boxed: #17679e;
+  --game-crossword: #ab4a2c;
+  --game-mini: #a83e6e;
   --game-travle: #0b6e75;
   --game: var(--accent);
   --game-wash: var(--accent-wash);
 
-  --shadow: 0 1px 2px rgba(13, 27, 30, 0.06), 0 8px 24px -16px rgba(13, 27, 30, 0.35);
-  --shadow-lift: 0 2px 4px rgba(13, 27, 30, 0.08), 0 18px 40px -22px rgba(13, 27, 30, 0.5);
+  /* Shadows in the ink's hue rather than neutral black, so raised things sit
+   * on the page instead of floating above a different one. */
+  --shadow: 0 1px 2px rgba(7, 22, 25, 0.05), 0 6px 20px -14px rgba(7, 22, 25, 0.3);
+  --shadow-lift: 0 2px 4px rgba(7, 22, 25, 0.07), 0 20px 44px -24px rgba(7, 22, 25, 0.45);
   --radius: 6px;
   --radius-lg: 12px;
 
@@ -65,78 +73,91 @@
 
   --measure: 660px;
   --wide: 980px;
+
+  /* Motion, in one place. Everything that moves reads from these, so the whole
+   * app accelerates and settles the same way. */
+  --fast: 110ms;
+  --mid: 200ms;
+  --slow: 360ms;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);      /* quick out, long settle */
+  --ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
+  --spring: cubic-bezier(0.34, 1.4, 0.64, 1);  /* a little overshoot */
 }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) { color-scheme: dark; }
   :root:not([data-theme="light"]) {
-    --ground: #0a1214;
-    --surface: #121e20;
-    --surface-sunk: #0e1a1c;
-    --surface-raised: #172628;
-    --ink: #e3eeeb;
-    --ink-soft: #b9cdca;
-    --muted: #8aa19f;
-    --rule: #223537;
-    --rule-firm: #345052;
+    color-scheme: dark;
+    --ground: #060f11;
+    --surface: #101c1f;
+    --surface-sunk: #0b1618;
+    --surface-raised: #16262a;
+    --ink: #e6f1ee;
+    --ink-soft: #b4cac7;
+    --muted: #859c9a;
+    --rule: #21363a;
+    --rule-firm: #33504f;
 
     --accent: #45c2b9;
     --accent-ink: #04201f;
-    --accent-wash: #143b39;
-    --accent-deep: #7fded6;
+    --accent-wash: #123a38;
+    --accent-deep: #86e4dc;
 
-    --ok: #57c68a;
-    --ok-wash: #17402c;
-    --near: #dcaa3c;
-    --near-wash: #322710;
-    --off: #e8776e;
-    --off-wash: #351a19;
-    --blank: #4a625f;
+    --ok: #4fc98a;
+    --ok-wash: #14402b;
+    --near: #dfae42;
+    --near-wash: #33280f;
+    --off: #ec7d72;
+    --off-wash: #3a1c1a;
+    --blank: #46605e;
 
-    --game-wordle: #57c68a;
-    --game-connections: #a98ae0;
-    --game-bee: #e0b23f;
-    --game-boxed: #5aa8dc;
+    --game-wordle: #4fc98a;
+    --game-connections: #b092e6;
+    --game-bee: #e3b544;
+    --game-boxed: #5fb0e4;
+    --game-crossword: #e0846a;
+    --game-mini: #e07aa8;
     --game-travle: #45c2b9;
 
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 30px -18px rgba(0, 0, 0, 0.9);
-    --shadow-lift: 0 2px 6px rgba(0, 0, 0, 0.5), 0 20px 44px -24px rgba(0, 0, 0, 1);
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.45), 0 8px 26px -16px rgba(0, 0, 0, 0.95);
+    --shadow-lift: 0 2px 6px rgba(0, 0, 0, 0.55), 0 22px 48px -26px rgba(0, 0, 0, 1);
   }
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --ground: #0a1214;
-  --surface: #121e20;
-  --surface-sunk: #0e1a1c;
-  --surface-raised: #172628;
-  --ink: #e3eeeb;
-  --ink-soft: #b9cdca;
-  --muted: #8aa19f;
-  --rule: #223537;
-  --rule-firm: #345052;
+    --ground: #060f11;
+  --surface: #101c1f;
+  --surface-sunk: #0b1618;
+  --surface-raised: #16262a;
+  --ink: #e6f1ee;
+  --ink-soft: #b4cac7;
+  --muted: #859c9a;
+  --rule: #21363a;
+  --rule-firm: #33504f;
 
   --accent: #45c2b9;
   --accent-ink: #04201f;
-  --accent-wash: #143b39;
-  --accent-deep: #7fded6;
+  --accent-wash: #123a38;
+  --accent-deep: #86e4dc;
 
-  --ok: #57c68a;
-  --ok-wash: #17402c;
-  --near: #dcaa3c;
-  --near-wash: #322710;
-  --off: #e8776e;
-  --off-wash: #351a19;
-  --blank: #4a625f;
+  --ok: #4fc98a;
+  --ok-wash: #14402b;
+  --near: #dfae42;
+  --near-wash: #33280f;
+  --off: #ec7d72;
+  --off-wash: #3a1c1a;
+  --blank: #46605e;
 
-  --game-wordle: #57c68a;
-  --game-connections: #a98ae0;
-  --game-bee: #e0b23f;
-  --game-boxed: #5aa8dc;
+  --game-wordle: #4fc98a;
+  --game-connections: #b092e6;
+  --game-bee: #e3b544;
+  --game-boxed: #5fb0e4;
+  --game-crossword: #e0846a;
+  --game-mini: #e07aa8;
   --game-travle: #45c2b9;
 
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 30px -18px rgba(0, 0, 0, 0.9);
-  --shadow-lift: 0 2px 6px rgba(0, 0, 0, 0.5), 0 20px 44px -24px rgba(0, 0, 0, 1);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.45), 0 8px 26px -16px rgba(0, 0, 0, 0.95);
+  --shadow-lift: 0 2px 6px rgba(0, 0, 0, 0.55), 0 22px 48px -26px rgba(0, 0, 0, 1);
 }
 
 /* ----------------------------------------------------------- structure */
@@ -159,6 +180,7 @@ body {
 #app { min-height: 100%; display: flex; flex-direction: column; }
 
 main {
+  animation: enter var(--slow) var(--ease) both;
   flex: 1;
   width: 100%;
   max-width: var(--measure);
@@ -167,6 +189,8 @@ main {
 }
 
 main.wide { max-width: var(--wide); }
+
+@keyframes enter { from { opacity: 0; transform: translateY(6px); } }
 
 h1, h2, h3 { margin: 0; font-weight: 700; line-height: 1.15; }
 h1 { font-size: clamp(1.6rem, 5vw, 2.1rem); font-stretch: 112%; letter-spacing: -0.01em; }
@@ -258,11 +282,15 @@ button, .btn {
   justify-content: center;
   gap: 7px;
   min-height: 40px;
-  transition: background 0.12s, border-color 0.12s, transform 0.06s;
+  transition:
+    background var(--fast) var(--ease-soft),
+    border-color var(--fast) var(--ease-soft),
+    box-shadow var(--mid) var(--ease),
+    transform var(--fast) var(--ease);
 }
 
-button:hover, .btn:hover { border-color: var(--game); }
-button:active, .btn:active { transform: translateY(1px); }
+button:hover, .btn:hover { border-color: var(--game); box-shadow: var(--shadow); }
+button:active, .btn:active { transform: translateY(1px) scale(0.985); }
 button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 
 button.primary, .btn.primary {
@@ -323,9 +351,13 @@ label.field > span { font-size: 0.82rem; font-weight: 600; color: var(--ink-soft
   color: inherit;
   text-decoration: none;
   box-shadow: var(--shadow);
-  transition: border-color 0.14s, box-shadow 0.14s, transform 0.1s;
+  transition:
+    border-color var(--mid) var(--ease),
+    box-shadow var(--mid) var(--ease),
+    transform var(--mid) var(--ease);
 }
-.tile-link:hover { border-color: var(--game); box-shadow: var(--shadow-lift); transform: translateY(-1px); }
+.tile-link:hover { border-color: var(--game); box-shadow: var(--shadow-lift); transform: translateY(-2px); }
+.tile-link:active { transform: translateY(0); transition-duration: var(--fast); }
 
 .glyph {
   width: 44px; height: 44px;
@@ -368,6 +400,8 @@ label.field > span { font-size: 0.82rem; font-weight: 600; color: var(--ink-soft
 .game[data-game="connections"] { --game: var(--game-connections); }
 .game[data-game="bee"] { --game: var(--game-bee); }
 .game[data-game="boxed"] { --game: var(--game-boxed); }
+.game[data-game="crossword"] { --game: var(--game-crossword); }
+.game[data-game="mini"] { --game: var(--game-mini); }
 .game[data-game="travle"] { --game: var(--game-travle); }
 .game { --game-wash: color-mix(in srgb, var(--game) 16%, var(--surface)); }
 
@@ -382,11 +416,12 @@ label.field > span { font-size: 0.82rem; font-weight: 600; color: var(--ink-soft
   border-radius: 999px;
   background: var(--ink);
   color: var(--surface);
-  animation: rise 0.18s ease-out;
+  box-shadow: var(--shadow);
+  animation: rise var(--mid) var(--spring);
 }
 .toast.bad { background: var(--off); color: #fff; }
 .toast.good { background: var(--ok); color: #fff; }
-@keyframes rise { from { opacity: 0; transform: translateY(4px); } }
+@keyframes rise { from { opacity: 0; transform: translateY(6px) scale(0.96); } }
 
 /* --------------------------------------------------------- wordle grid */
 
@@ -411,9 +446,26 @@ label.field > span { font-size: 0.82rem; font-weight: 600; color: var(--ink-soft
 .wordle-cell.hit { background: var(--ok); border-color: var(--ok); color: #fff; }
 .wordle-cell.near { background: var(--near); border-color: var(--near); color: #fff; }
 .wordle-cell.miss { background: var(--blank); border-color: var(--blank); color: #fff; }
-.wordle-cell.pop { animation: pop 0.1s ease-out; }
-@keyframes pop { 50% { transform: scale(1.08); } }
-.wordle-row.shake { animation: shake 0.4s; }
+/*
+ * The reveal is a flip: the tile turns on its horizontal axis and the colour
+ * arrives at the halfway point, when it is edge-on and the change cannot be
+ * seen happening. Staggering along the row makes it read left to right, the
+ * way the word does.
+ */
+.wordle-cell.pop {
+  animation: flip var(--slow) var(--ease-soft) both;
+  backface-visibility: hidden;
+}
+@keyframes flip {
+  0% { transform: rotateX(0deg); }
+  50% { transform: rotateX(90deg); }
+  100% { transform: rotateX(0deg); }
+}
+
+/* A typed letter settles rather than appearing. */
+.wordle-cell.filled { animation: settle var(--fast) var(--spring); }
+@keyframes settle { from { transform: scale(0.88); } }
+.wordle-row.shake { animation: shake 0.42s var(--ease-soft); }
 @keyframes shake {
   10%, 90% { transform: translateX(-2px); }
   20%, 80% { transform: translateX(4px); }
@@ -461,9 +513,18 @@ label.field > span { font-size: 0.82rem; font-weight: 600; color: var(--ink-soft
 }
 .conn-cell[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
 .conn-cell.hinted { box-shadow: inset 0 0 0 2px var(--game); }
-.conn-cell.wrong { animation: shake 0.4s; }
+.conn-cell.wrong { animation: shake 0.42s var(--ease-soft); }
+.conn-cell {
+  transition:
+    background var(--fast) var(--ease-soft),
+    color var(--fast) var(--ease-soft),
+    transform var(--fast) var(--ease);
+}
+.conn-cell:active { transform: scale(0.96); }
+@keyframes land { from { opacity: 0; transform: translateY(-8px) scale(0.97); } }
 
 .conn-solved {
+  animation: land var(--slow) var(--spring) both;
   border-radius: var(--radius);
   padding: 10px 12px;
   text-align: center;
@@ -575,6 +636,143 @@ label.field > span { font-size: 0.82rem; font-weight: 600; color: var(--ink-soft
   background: transparent; font-weight: 500;
 }
 .suggestions button[aria-selected="true"] { background: var(--game-wash); }
+
+/* ------------------------------------------------------------ crossword */
+
+/*
+ * The grid is square whatever its size, and the squares scale with it: five
+ * across on a phone are comfortably tappable, fifteen are small but legible.
+ * `aspect-ratio` on the container keeps it square without arithmetic.
+ */
+.xw-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--size), 1fr);
+  gap: 1px;
+  background: var(--ink);
+  border: 2px solid var(--ink);
+  border-radius: 3px;
+  aspect-ratio: 1;
+  width: 100%;
+  max-width: min(100%, 520px);
+  margin: 0 auto;
+  overflow: hidden;
+  touch-action: manipulation;
+}
+
+.xw-cell {
+  position: relative;
+  min-height: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: var(--surface-raised);
+  color: var(--ink);
+  font-family: var(--display);
+  font-weight: 700;
+  font-stretch: 100%;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background var(--fast) var(--ease-soft);
+}
+.xw-cell.black { background: var(--ink); cursor: default; }
+.xw-cell.in-word { background: var(--game-wash); }
+.xw-cell.cursor { background: var(--game); color: var(--accent-ink); }
+.xw-cell.given { color: var(--game); }
+.xw-cell.cursor.given { color: var(--accent-ink); }
+.xw-cell.wrong::after {
+  /* A stroke through the square rather than a colour swap, so it survives the
+   * cursor and the word highlight sitting on the same cell. */
+  content: "";
+  position: absolute;
+  inset: 12%;
+  border-top: 2px solid var(--off);
+  transform: rotate(-45deg);
+  transform-origin: center;
+  pointer-events: none;
+}
+.xw-cell:hover:not(.black):not(.cursor) { background: var(--surface-sunk); }
+.xw-cell:disabled { cursor: default; }
+
+.xw-number {
+  position: absolute;
+  top: 1px;
+  left: 2px;
+  font-family: var(--mono);
+  font-size: clamp(0.4rem, 1.4vw, 0.56rem);
+  font-weight: 500;
+  line-height: 1;
+  opacity: 0.75;
+  pointer-events: none;
+}
+.xw-letter {
+  font-size: clamp(0.7rem, 3.4vw, 1.5rem);
+  line-height: 1;
+  animation: settle var(--fast) var(--spring);
+}
+/* Fifteen across needs the letters to give up some room to the numbers. */
+.xw-grid[style*="--size: 15"] .xw-letter { font-size: clamp(0.55rem, 2.4vw, 1.05rem); }
+
+/* The clue you are on, pinned above the grid where your eyes already are. */
+.xw-cluebar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  text-align: left;
+  font-weight: 500;
+  border-color: transparent;
+  background: var(--game-wash);
+  color: var(--ink);
+}
+.xw-cluebar:hover { border-color: var(--game); }
+.xw-cluenum {
+  font-family: var(--mono);
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: var(--game);
+  flex: none;
+}
+
+.xw-lists { display: grid; gap: 16px; }
+@media (min-width: 620px) { .xw-lists { grid-template-columns: 1fr 1fr; } }
+
+.xw-clues { display: grid; gap: 1px; max-height: 260px; overflow-y: auto; margin-top: 6px; }
+.xw-clue {
+  display: grid;
+  grid-template-columns: 1.6rem 1fr;
+  gap: 8px;
+  align-items: start;
+  text-align: left;
+  font-weight: 400;
+  font-size: 0.85rem;
+  min-height: 0;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+}
+.xw-clue b { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); padding-top: 2px; }
+.xw-clue:hover { background: var(--surface-sunk); }
+.xw-clue.on { background: var(--game-wash); }
+.xw-clue.on b { color: var(--game); }
+.xw-clue.done { opacity: 0.45; text-decoration: line-through; }
+
+/* Parked off-screen: tapping the grid focuses it so a phone raises its
+ * keyboard, since a grid of buttons never would. */
+.xw-catcher {
+  position: fixed;
+  opacity: 0;
+  pointer-events: none;
+  width: 1px;
+  height: 1px;
+  top: 50%;
+  left: 0;
+  border: none;
+  padding: 0;
+  min-height: 0;
+}
 
 /* ---------------------------------------------------------- stats page */
 

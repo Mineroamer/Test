@@ -217,7 +217,17 @@ function buildApi(store) {
     const slow = limiter.take("signup:" + ctx.ip, limiter.SIGN_UP);
     if (!slow.ok) fail(429, `That is a lot of new accounts from one place. Try again in ${Math.ceil(slow.retryAfter / 60)} minutes.`);
 
-    const user = await auth.createUser(store, { handle, password: ctx.body.password, display });
+    /* Claim the name before hashing, which is the slow part and an await: two
+     * people racing for the same name would otherwise both get past the check
+     * above and both be written down. */
+    if (!auth.claim(handle)) fail(409, "That username is taken.");
+
+    let user;
+    try {
+      user = await auth.createUser(store, { handle, password: ctx.body.password, display });
+    } finally {
+      auth.release(handle);
+    }
 
     /* Attach the session they already had, so a round played as a guest is
      * still open in front of them and their runs carry over. */
@@ -356,7 +366,24 @@ function buildApi(store) {
     const game = games.get(run.game);
     const puzzle = puzzleForRun(store, run);
 
-    const result = game.hint(puzzle, run.state);
+    /* A crossword hint fills in a square, so the browser says which one it is
+     * looking at; every other game ignores the extra argument. */
+    const result = game.hint(puzzle, run.state, ctx.body.at);
+    if (result.ok) settle(store, run, ctx);
+    store.touch();
+    return { result, run: runView(store, run) };
+  });
+
+  /*
+   * Crossword only: mark the letters already written that are wrong, without
+   * saying what the right ones are.
+   */
+  router.post("/api/runs/:id/check", (ctx) => {
+    const run = getRun(ctx, ctx.params.id);
+    const game = games.get(run.game);
+    if (!game.check) fail(400, "There is nothing to check in this game.");
+
+    const result = game.check(puzzleForRun(store, run), run.state, ctx.body.cells);
     store.touch();
     return { result, run: runView(store, run) };
   });

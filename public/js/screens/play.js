@@ -22,6 +22,9 @@ const VIEWS = {
   bee: () => import("../games/bee.js"),
   boxed: () => import("../games/boxed.js"),
   travle: () => import("../games/travle.js"),
+  /* One view serves both crosswords; only the grid size differs. */
+  crossword: () => import("../games/crossword.js"),
+  mini: () => import("../games/crossword.js"),
 };
 
 export async function render({ game, mode, code }) {
@@ -49,7 +52,8 @@ export async function render({ game, mode, code }) {
     say: (message, tone) => toast(toastSlot, message, tone),
     actions: {
       guess: (value) => send(() => api.guess(run.id, value)),
-      hint: () => send(() => api.hint(run.id), { hint: true }),
+      hint: (at) => send(() => api.hint(run.id, at), { hint: true }),
+      check: (cells) => send(() => api.check(run.id, cells)),
       back: () => send(() => api.back(run.id)),
       reveal: () => send(() => api.reveal(run.id)),
     },
@@ -132,14 +136,14 @@ export async function render({ game, mode, code }) {
     swap(footer,
       over ? result() : h("div.row.row-wrap", { style: { marginTop: "14px", justifyContent: "center" } },
         instance.controls ? instance.controls() : null,
-        h("button.small", { onClick: ctx.actions.hint }, "Hint",
+        h("button.small", { onClick: () => ctx.actions.hint(instance.focusCell ? instance.focusCell() : undefined) }, "Hint",
           run.puzzle.hints && run.puzzle.hints.length
             ? h("span.mono.tiny", {}, `(${run.puzzle.hints.length})`) : null),
         canGiveUp() ? h("button.ghost.small", { onClick: confirmGiveUp }, "Give up") : null));
   }
 
   function canGiveUp() {
-    return ["bee", "boxed", "travle"].includes(run.game);
+    return ["bee", "boxed", "travle", "crossword", "mini"].includes(run.game);
   }
 
   function confirmGiveUp() {
@@ -196,10 +200,10 @@ export async function render({ game, mode, code }) {
   }
 
   function guessNoun(key) {
-    return { connections: "attempt", bee: "word", boxed: "word", travle: "move" }[key] || "guess";
+    return { connections: "attempt", bee: "word", boxed: "word", travle: "move", crossword: "letter", mini: "letter" }[key] || "guess";
   }
   function guessPlural(key) {
-    return { connections: "attempts", bee: "words", boxed: "words", travle: "moves" }[key] || "guesses";
+    return { connections: "attempts", bee: "words", boxed: "words", travle: "moves", crossword: "letters", mini: "letters" }[key] || "guesses";
   }
 
   async function again() {

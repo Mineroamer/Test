@@ -79,7 +79,9 @@ async function main() {
     assert.equal(status, 200);
     assert.equal(body.user, null);
     assert.equal(typeof body.day, "number");
-    assert.equal(body.catalogue.length, 5);
+    /* Named rather than counted, so adding a game does not fail this. */
+    const offered = body.catalogue.map((entry) => entry.key).sort();
+    assert.deepEqual(offered, ["bee", "boxed", "connections", "crossword", "mini", "travle", "wordle"]);
   });
 
   await test("signup rejects a short password", async () => {
@@ -110,6 +112,32 @@ async function main() {
     await other("GET", "/api/me");
     const { status } = await other("POST", "/api/auth/signup", { handle: "ALICE", password: "correct horse" });
     assert.equal(status, 409);
+  });
+
+  await test("racing signups cannot both take one username", async () => {
+    /* Hashing a password is an await, so without a reservation both requests
+     * pass the "is it taken?" check and both get written down - and the second
+     * account can then never sign in. */
+    const attempt = async (i) => {
+      const who = client();
+      await who("GET", "/api/me");
+      const { status } = await who("POST", "/api/auth/signup", {
+        handle: "raced", password: "a long enough password", display: "Racer " + i,
+      });
+      return status;
+    };
+
+    const results = await Promise.all([0, 1, 2, 3, 4].map(attempt));
+    assert.equal(results.filter((status) => status === 200).length, 1, "exactly one should win");
+    assert.equal(results.filter((status) => status === 409).length, 4, "the rest are told it is taken");
+
+    const holders = Object.values(store.data.users).filter((user) => user.handle === "raced");
+    assert.equal(holders.length, 1, "and only one account exists");
+
+    const back = client();
+    await back("GET", "/api/me");
+    const { status } = await back("POST", "/api/auth/login", { handle: "raced", password: "a long enough password" });
+    assert.equal(status, 200, "the account that won can sign in");
   });
 
   await test("login refuses the wrong password", async () => {
@@ -321,6 +349,80 @@ async function main() {
 
     const { body: played } = await alice("POST", `/api/runs/${body.run.id}/guess`, { value: puzzle.outer.join("") });
     assert.equal(played.result.ok, false);
+  });
+
+  await test("both crosswords deal a filled, clued grid", async () => {
+    for (const key of ["mini", "crossword"]) {
+      const { body } = await alice("POST", `/api/play/${key}`, { mode: "unlimited" });
+      const puzzle = body.run.puzzle;
+
+      assert.equal(puzzle.size, key === "mini" ? 5 : 15);
+      assert.ok(puzzle.entries.length > 0, `${key} should have entries`);
+      assert.ok(puzzle.entries.every((entry) => entry.clue && entry.clue.length > 5),
+        `every ${key} entry needs a clue`);
+      assert.equal(puzzle.answers, null, "answers must not ship with the grid");
+      assert.equal(puzzle.solution, null, "nor the filled grid");
+
+      /* No entry's answer should be recoverable from what was sent. */
+      const real = answerTo(body.run.id);
+      const secret = real.entries[0].answer.toUpperCase();
+      assert.equal(JSON.stringify(puzzle).toUpperCase().includes(secret), false,
+        `${key} leaked an answer`);
+    }
+  });
+
+  await test("a crossword can be typed into and solved", async () => {
+    const { body } = await alice("POST", "/api/play/mini", { mode: "unlimited" });
+    const id = body.run.id;
+    const real = answerTo(id);
+
+    /* A letter in the wrong place does not finish it. */
+    const first = real.grid.indexOf(".") === -1 ? 0 : [...real.grid].findIndex((c) => c !== "#");
+    const wrong = real.letters[first].toUpperCase() === "A" ? "B" : "A";
+    const typed = await alice("POST", `/api/runs/${id}/guess`, { value: { cell: first, letter: wrong } });
+    assert.equal(typed.body.result.ok, true);
+    assert.equal(typed.body.run.puzzle.status, "playing");
+
+    /* Checking points at it without giving the answer. */
+    const checked = await alice("POST", `/api/runs/${id}/check`, {});
+    assert.ok(checked.body.result.wrong.includes(first), "the wrong letter should be flagged");
+    assert.equal(JSON.stringify(checked.body.result).includes(real.letters[first].toUpperCase()), false,
+      "checking must not reveal the right letter");
+
+    /* Fill it in properly and it should finish. */
+    for (let cell = 0; cell < real.grid.length; cell++) {
+      if (real.grid[cell] === "#") continue;
+      await alice("POST", `/api/runs/${id}/guess`, { value: { cell, letter: real.letters[cell] } });
+    }
+    const done = await alice("GET", `/api/runs/${id}`);
+    assert.equal(done.body.run.puzzle.status, "won");
+    assert.ok(done.body.run.puzzle.answers.length > 0, "answers arrive at the end");
+  });
+
+  await test("a crossword hint fills the square you are looking at", async () => {
+    const { body } = await alice("POST", "/api/play/mini", { mode: "unlimited" });
+    const real = answerTo(body.run.id);
+    const target = [...real.grid].findIndex((c) => c !== "#");
+
+    const { body: hinted } = await alice("POST", `/api/runs/${body.run.id}/hint`, { at: target });
+    assert.equal(hinted.result.ok, true);
+    assert.equal(hinted.result.hint.cell, target);
+    assert.equal(hinted.result.hint.letter, real.letters[target].toUpperCase());
+    assert.ok(hinted.run.puzzle.revealed.includes(target), "a given letter is marked as given");
+
+    /* And a given letter cannot then be typed over. */
+    const over = await alice("POST", `/api/runs/${body.run.id}/guess`, { value: { cell: target, letter: "Z" } });
+    assert.equal(over.body.result.ok, false);
+  });
+
+  await test("giving up on a crossword shows the whole grid", async () => {
+    const { body } = await alice("POST", "/api/play/mini", { mode: "unlimited" });
+    const real = answerTo(body.run.id);
+    const { body: given } = await alice("POST", `/api/runs/${body.run.id}/reveal`, {});
+
+    assert.equal(given.run.puzzle.status, "done");
+    assert.equal(given.run.puzzle.solution, real.letters.toUpperCase());
+    assert.equal(given.run.summary.won, false, "giving up is not a win");
   });
 
   await test("one player cannot open another's round", async () => {

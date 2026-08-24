@@ -23,12 +23,16 @@ export function shareText(run, origin = location.origin) {
       ? `Puzzle Club ${run.gameName} · "${run.custom ? run.custom.title : "shared"}"`
       : `Puzzle Club ${run.gameName} · unlimited`;
 
-  const lines = [title, scoreLine(run), "", ...grid(run), ""];
+  const squares = grid(run);
+  const link = run.mode === "custom" && run.custom
+    ? `${origin}/#/puzzle/${run.custom.code}`
+    : origin;
 
-  if (run.mode === "custom" && run.custom) lines.push(`${origin}/#/puzzle/${run.custom.code}`);
-  else lines.push(origin);
-
-  return lines.filter((line) => line !== undefined).join("\n").trim();
+  /* Blocks, joined by one blank line each - so a game with no grid to show
+   * does not leave a gap where one would have been. */
+  return [title + "\n" + scoreLine(run), squares.join("\n"), link]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 function scoreLine(run) {
@@ -46,9 +50,27 @@ function scoreLine(run) {
       return `${s.won ? `Solved in ${s.guesses}` : "Not solved"}${hints}`;
     case "travle":
       return `${s.won ? `${s.guesses} moves, par ${s.par}` : "Did not arrive"}${hints}`;
+    case "crossword":
+    case "mini": {
+      /* A crossword is shared on its time, the way crossword solvers compare
+       * them. How much of it was filled without help says the rest. */
+      /* Checked against null, not truthiness: a startedAt of 0 is a real time. */
+      const took = run.finishedAt != null && run.startedAt != null
+        ? clock(run.finishedAt - run.startedAt)
+        : null;
+      const filled = `${s.right}/${s.squares} squares`;
+      return [s.won ? took || "Solved" : "Not finished", filled, hints.replace(/^ · /, "")]
+        .filter(Boolean).join(" · ");
+    }
     default:
       return s.won ? "Solved" : "Not solved";
   }
+}
+
+function clock(ms) {
+  const total = Math.round(ms / 1000);
+  const mins = Math.floor(total / 60);
+  return mins ? `${mins}m ${String(total % 60).padStart(2, "0")}s` : `${total}s`;
 }
 
 function grid(run) {
@@ -73,6 +95,33 @@ function grid(run) {
       const filled = Math.round((s.score / Math.max(1, s.maxScore)) * 10);
       return ["\u{1F7E8}".repeat(filled) + "\u{2B1C}".repeat(Math.max(0, 10 - filled))];
     }
+
+    case "mini": {
+      /* The grid as squares: green where the answer was theirs, yellow where
+       * it was given. The pattern of black squares gives nothing away - it is
+       * the first thing anyone opening the puzzle sees. */
+      const p = run.puzzle;
+      if (!p.solution) return [];
+      const rows = [];
+      for (let row = 0; row < p.size; row++) {
+        let line = "";
+        for (let col = 0; col < p.size; col++) {
+          const cell = row * p.size + col;
+          if (p.grid[cell] === "#") line += "\u{2B1B}";
+          else if (p.revealed.includes(cell)) line += "\u{1F7E8}";
+          else if (p.letters[cell] === p.solution[cell]) line += "\u{1F7E9}";
+          else line += "\u{2B1C}";
+        }
+        rows.push(line);
+      }
+      return rows;
+    }
+
+    /* The full crossword is shared on its time alone: two hundred and
+     * twenty-five squares is a wall of emoji nobody wants pasted at them. */
+    case "crossword":
+      return [];
+
     default:
       return [];
   }

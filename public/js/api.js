@@ -49,7 +49,9 @@ export const api = {
   play: (game, body) => call("POST", `/api/play/${game}`, body),
   run: (id) => call("GET", `/api/runs/${id}`),
   guess: (id, value) => call("POST", `/api/runs/${id}/guess`, { value }),
-  hint: (id) => call("POST", `/api/runs/${id}/hint`, {}),
+  /* `at` is the square a crossword hint should fill; other games ignore it. */
+  hint: (id, at) => call("POST", `/api/runs/${id}/hint`, at === undefined ? {} : { at }),
+  check: (id, cells) => call("POST", `/api/runs/${id}/check`, cells ? { cells } : {}),
   back: (id) => call("POST", `/api/runs/${id}/back`, {}),
   reveal: (id) => call("POST", `/api/runs/${id}/reveal`, {}),
 

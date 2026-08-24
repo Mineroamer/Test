@@ -89,6 +89,8 @@ const ICONS = {
   bee: '<path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z"/><path d="M12 8.5v7M8.5 10.2l7 3.6M15.5 10.2l-7 3.6"/>',
   boxed: '<rect x="4" y="4" width="16" height="16" rx="2"/><circle cx="9" cy="4" r="1.4" fill="currentColor" stroke="none"/><circle cx="15" cy="20" r="1.4" fill="currentColor" stroke="none"/><path d="M9 4l6 16"/>',
   travle: '<path d="M4 18l5-9 5 5 6-8"/><circle cx="4" cy="18" r="2.2" fill="currentColor" stroke="none"/><circle cx="20" cy="6" r="2.2" fill="currentColor" stroke="none"/>',
+  crossword: '<rect x="3" y="3" width="18" height="18" rx="1.5"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/><rect x="9" y="9" width="6" height="6" fill="currentColor" stroke="none" opacity=".35"/>',
+  mini: '<rect x="4" y="4" width="16" height="16" rx="1.5"/><path d="M12 4v16M4 12h16"/><rect x="4" y="4" width="8" height="8" fill="currentColor" stroke="none" opacity=".35"/>',
   friends: '<circle cx="9" cy="8" r="3.4"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M16 5.5a3.4 3.4 0 0 1 0 6.6M17.5 19a5.5 5.5 0 0 0-2-4.2"/>',
   stats: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
   build: '<path d="M4 20l4-1 9.5-9.5a2.1 2.1 0 0 0-3-3L5 16z"/><path d="M14.5 5.5l4 4"/>',

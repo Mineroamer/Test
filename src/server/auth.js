@@ -56,6 +56,29 @@ function checkSignup({ handle, password, display }) {
   return { errors, handle: clean, display: name };
 }
 
+/*
+ * Handles being created right now.
+ *
+ * Hashing a password takes about a tenth of a second, and that is an await -
+ * so two people signing up with the same name at the same moment both pass the
+ * "is it taken?" check before either has been written down, and both get the
+ * name. The second one can then never sign in, because looking a handle up
+ * finds the first. Reserving the name before the await closes that window.
+ *
+ * This is per-process, which is the right scope: the store is a file owned by
+ * one process, so there is no second writer to coordinate with.
+ */
+const claiming = new Set();
+
+/** Reserve a handle, or say it is already spoken for. */
+function claim(handle) {
+  if (claiming.has(handle)) return false;
+  claiming.add(handle);
+  return true;
+}
+
+const release = (handle) => claiming.delete(handle);
+
 async function createUser(store, { handle, password, display }) {
   const salt = newSalt();
   const passwordHash = await hash(password, salt);
@@ -133,4 +156,5 @@ module.exports = {
   HANDLE, SESSION_DAYS,
   hash, newId, newToken, sameHash, normaliseHandle, checkSignup,
   createUser, verify, findByHandle, startSession, readSession, endSession, publicUser, colourFor,
+  claim, release, claiming,
 };

@@ -45,6 +45,7 @@ PC.data = {
   beeWords: ${read("data", "bee-words.json")},
   beePuzzles: ${JSON.stringify(bee)},
   boxedWords: ${read("data", "boxed-words.json")},
+  crosswordClues: ${read("data", "crossword-clues.json")},
   connectionsGroups: ${groups}
 };`;
 }
@@ -101,6 +102,25 @@ function buildEngines() {
     travle: commonjsToExpression(read("src", "server", "games", "travle.js"), []),
   };
 
+  /*
+   * The crossword builder is a module of its own that the two crossword games
+   * share, so it is packed once and both read it from there.
+   */
+  const builder = read("src", "server", "crossword.js")
+    .replace(/^"use strict";\n/, "")
+    .replace(/^const path = require\("node:path"\);\n/m, "")
+    .replace(/^const \{([^}]*)\} = require\("\.\/rng\.js"\);\n/m, "const {$1} = PC.rng;\n")
+    .replace(
+      'const CLUES = require(path.join(__dirname, "..", "..", "data", "crossword-clues.json"));',
+      "const CLUES = PC.data.crosswordClues;"
+    )
+    .replace(/module\.exports = /, "return ");
+
+  const crosswords = read("src", "server", "games", "crossword.js")
+    .replace(/^"use strict";\n/, "")
+    .replace('const { buildStubbornly } = require("../crossword.js");', "const { buildStubbornly } = PC.crosswordBuilder;")
+    .replace(/module\.exports = /, "return ");
+
   const rng = read("src", "server", "rng.js")
     .replace(/^"use strict";\n/, "")
     .replace(/module\.exports = /, "return ");
@@ -115,8 +135,16 @@ function buildEngines() {
 
   return `PC.rng = (function () {\n${rng}\n})();
 PC.catalogue = ${catalogue};
+PC.crosswordBuilder = (function () {
+${builder}
+})();
+PC.crosswords = (function () {
+${crosswords}
+})();
 PC.games = {
-${Object.entries(modules).map(([key, body]) => `  ${key}: ${body}`).join(",\n")}
+${Object.entries(modules).map(([key, body]) => `  ${key}: ${body}`).join(",\n")},
+  crossword: PC.crosswords.crossword,
+  mini: PC.crosswords.mini
 };`;
 }
 
@@ -185,6 +213,7 @@ const KEY_FOR = {
   "../games/bee.js": "games/bee",
   "../games/boxed.js": "games/boxed",
   "../games/travle.js": "games/travle",
+  "../games/crossword.js": "games/crossword",
 };
 
 function resolve(from) {
@@ -207,6 +236,7 @@ const ORDER = [
   ["games/bee", ["public", "js", "games", "bee.js"]],
   ["games/boxed", ["public", "js", "games", "boxed.js"]],
   ["games/travle", ["public", "js", "games", "travle.js"]],
+  ["games/crossword", ["public", "js", "games", "crossword.js"]],
   ["screens/home", ["public", "js", "screens", "home.js"]],
   ["screens/auth", ["public", "js", "screens", "auth.js"]],
   ["screens/stats", ["public", "js", "screens", "stats.js"]],

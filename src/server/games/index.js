@@ -14,8 +14,9 @@ const connections = require("./connections.js");
 const bee = require("./spellingbee.js");
 const boxed = require("./letterboxed.js");
 const travle = require("./travle.js");
+const { crossword, mini } = require("./crossword.js");
 
-const LIST = [wordle, connections, bee, boxed, travle];
+const LIST = [wordle, connections, bee, boxed, crossword, mini, travle];
 const GAMES = Object.fromEntries(LIST.map((g) => [g.key, g]));
 
 /* What the home screen shows about each game, kept here so the browser does
@@ -51,6 +52,22 @@ const CATALOGUE = [
     tagline: "Twelve letters, four sides.",
     blurb: "Never take two letters from the same side. Use all twelve.",
     icon: "boxed",
+    custom: false,
+  },
+  {
+    key: "crossword",
+    name: "The Crossword",
+    tagline: "Fifteen by fifteen.",
+    blurb: "A full grid. Every answer crosses another, so the ones you know give you the ones you do not.",
+    icon: "crossword",
+    custom: false,
+  },
+  {
+    key: "mini",
+    name: "The Mini",
+    tagline: "Five by five.",
+    blurb: "The same idea, small enough for a bus stop.",
+    icon: "mini",
     custom: false,
   },
   {
