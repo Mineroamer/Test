@@ -5,11 +5,14 @@
   "description": "Daily and unlimited word, letter and geography puzzles, with accounts, friends and shareable puzzles of your own.",
   "type": "commonjs",
   "main": "server.js",
-  "engines": { "node": ">=18" },
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "start": "node server.js",
     "test": "node tests/run.js",
-    "build:data": "node scripts/build-data.mjs"
+    "build:data": "node scripts/build-data.mjs",
+    "build:page": "node scripts/build-artifact.mjs"
   },
   "devDependencies": {
     "word-list": "^4.0.0",

@@ -3,12 +3,36 @@
 Five puzzle games, each with a daily puzzle and an unlimited one. Accounts,
 friends, streaks, and puzzles you can build yourself and send to people.
 
+There are two ways to run it, from the same source.
+
+### The full version — accounts and friends
+
 ```
 node server.js        # then open http://127.0.0.1:3000
 ```
 
-There is nothing to install. No database, no build step, no dependencies at
-runtime — Node 18 or newer is the only requirement.
+Nothing to install. No database, no build step, no dependencies at runtime —
+Node 18 or newer is the only requirement. This is the version with sign-up,
+friends, standings, and a server that keeps the answers to itself.
+
+### The single page — no server at all
+
+```
+npm run build:page    # writes dist/puzzle-club.html
+```
+
+One HTML file, about 1.5 MB, that runs the same five games with no server
+behind it. Open it off disk, put it on any static host, email it to someone.
+
+What it trades away is what a server was doing: there are no accounts, so
+there are no friends and no shared standings, and your record lives in that
+browser rather than in an account. The answer is also in the page, because
+there is nowhere else for it to be.
+
+What it keeps is the surprising part — **you can still build a puzzle and
+send it**. The puzzle is packed into the link itself rather than stored
+somewhere and looked up, so a link is the whole puzzle. It works for anyone,
+needs no sign-up, and cannot rot.
 
 ## The games
 
@@ -116,7 +140,13 @@ public/                the browser app: no build step, no framework
   js/games/travle/     the original game's engine and map, used by both sides
 tests/run.js           52 tests over the real HTTP server
 scripts/build-data.mjs regenerates data/ from the source word lists
+scripts/build-artifact.mjs packs everything into one static HTML file
 ```
+
+`public/js/local-api.js` is the whole of what the single-page build changes:
+it presents the same functions `public/js/api.js` does, and answers them by
+running the engines in the browser instead of asking a server. No screen and
+no game view knows which one it is talking to.
 
 `src/server/games/travle.js` and the browser both `require` the same
 `public/js/games/travle/engine.js`. One implementation, two callers.

@@ -13,7 +13,7 @@ import { h, icon, countdown, sheet, plural } from "../ui.js";
 export async function render() {
   /* Signed-in extras are a bonus, not a blocker: if either call fails the
    * games still list. */
-  const [puzzles, board] = state.user
+  const [puzzles, board] = state.user && !state.local
     ? await Promise.all([
         api.friendPuzzles().catch(() => ({ puzzles: [] })),
         api.leaderboard().catch(() => ({ rows: [] })),
@@ -31,7 +31,7 @@ export async function render() {
         h("span.label", {}, state.dayLabel)),
       h("div.stack", state.catalogue.map((game) => gameTile(game, done[game.key])))),
     unlimitedCard(),
-    state.user ? friendPuzzlesCard(puzzles.puzzles) : joinCard(),
+    state.local ? sharedCard() : state.user ? friendPuzzlesCard(puzzles.puzzles) : joinCard(),
     state.user && board.rows.length > 1 ? boardCard(board) : null,
     footer());
 }
@@ -138,23 +138,39 @@ function friendPuzzlesCard(puzzles) {
       h("a.btn.small", { href: "#/friends" }, "Friends")));
 }
 
+/*
+ * The single-page build has no friends list to draw puzzles from, so this
+ * says what it can do instead: build one, and hand over the link.
+ */
+const sharedCard = () => h("section.card.stack",
+  h("div.spread",
+    h("h2", {}, "Puzzles of your own"),
+    h("a.btn.small.primary", { href: "#/create" }, "Build one")),
+  h("p.muted.small", { style: { margin: 0 } },
+    "Write a Wordle, a Connections or a Travle route and you get a link. The puzzle travels inside the link itself, so anyone can open it and there is nothing to sign up for."),
+  h("div.row",
+    h("button.small", { onClick: openCode }, "Open a link you were sent"),
+    h("a.btn.small", { href: "#/stats" }, "Your record")));
+
 function openCode() {
   sheet("Open a shared puzzle", (body, close) => {
     const input = h("input", {
-      placeholder: "ABC123",
-      maxLength: 6,
-      autocapitalize: "characters",
+      placeholder: "paste the code or link",
+      autocapitalize: "none",
       spellcheck: false,
-      style: { fontFamily: "var(--mono)", letterSpacing: "0.2em", textTransform: "uppercase", textAlign: "center", fontSize: "1.2rem" },
+      style: { fontFamily: "var(--mono)", textAlign: "center" },
     });
     const note = h("p.small.muted", { style: { margin: 0 } },
-      "Six characters, from whoever built the puzzle.");
+      "Whatever the person who built it sent you.");
 
     const open = () => {
-      const code = input.value.trim().toUpperCase();
-      if (code.length !== 6) {
-        note.textContent = "A code is six characters long.";
-        note.className = "small";
+      const typed = input.value.trim();
+      /* People paste the whole link as often as the code, so take either. */
+      const fromLink = typed.match(/#\/puzzle\/(.+)$/);
+      const code = fromLink ? fromLink[1] : typed;
+
+      if (!code) {
+        note.textContent = "Paste the code or the link you were sent.";
         note.style.color = "var(--off)";
         return;
       }

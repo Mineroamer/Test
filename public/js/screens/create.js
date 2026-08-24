@@ -332,11 +332,18 @@ function travleForm() {
 function made(puzzle) {
   const link = `${location.origin}/#/puzzle/${puzzle.code}`;
 
+  /* A short code is something you can read down a phone; a packed one holds
+   * the whole puzzle and is only ever pasted. Show whichever this is. */
+  const readable = puzzle.code.length <= 12;
+
   sheet("Ready to send", (body) => {
-    const status = h("p.small.muted", { style: { margin: 0 } }, "Send them the code or the link — either works.");
+    const status = h("p.small.muted", { style: { margin: 0 } },
+      readable ? "Send them the code or the link — either works." : "Send them this link. The puzzle travels inside it.");
 
     body.append(
-      h("div.code-badge", {}, puzzle.code),
+      readable
+        ? h("div.code-badge", {}, puzzle.code)
+        : h("div.share-box", { style: { textAlign: "center", wordBreak: "break-all" } }, link),
       h("p.small.muted", { style: { margin: 0, textAlign: "center" } }, puzzle.title),
       status,
       h("div.row",
@@ -347,13 +354,15 @@ function made(puzzle) {
             status.style.color = ok ? "var(--ok)" : "var(--off)";
           },
         }, "Copy link"),
-        h("button.grow", {
-          onClick: async () => {
-            const ok = await copy(puzzle.code);
-            status.textContent = ok ? "Code copied." : "Could not copy.";
-            status.style.color = ok ? "var(--ok)" : "var(--off)";
-          },
-        }, "Copy code")),
+        readable
+          ? h("button.grow", {
+              onClick: async () => {
+                const ok = await copy(puzzle.code);
+                status.textContent = ok ? "Code copied." : "Could not copy.";
+                status.style.color = ok ? "var(--ok)" : "var(--off)";
+              },
+            }, "Copy code")
+          : null),
       /* Both of these change the hash, which closes the sheet on its own. */
       h("div.row",
         h("a.btn.grow", { href: `#/puzzle/${puzzle.code}` }, "Try it"),

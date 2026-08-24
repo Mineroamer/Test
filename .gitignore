@@ -4,3 +4,4 @@ data/store.json.tmp
 data/store.json.corrupt-*
 *.log
 .DS_Store
+dist/

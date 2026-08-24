@@ -76,9 +76,15 @@ function paintAccount() {
 
   /* The sections only exist for someone signed in, so the bar stays empty
    * rather than offering links that would bounce them to the sign-in form. */
+  /* Friends need accounts on a shared server. The single-page build has
+   * neither, so the section is not offered there rather than offered and
+   * then found empty. */
+  const sections = state.local
+    ? [["#/create", "Build"], ["#/stats", "Stats"]]
+    : [["#/friends", "Friends"], ["#/create", "Build"], ["#/stats", "Stats"]];
+
   swap(nav, state.user
-    ? [["#/friends", "Friends"], ["#/create", "Build"], ["#/stats", "Stats"]]
-        .map(([href, label]) => h("a.btn.ghost.small", { href }, label))
+    ? sections.map(([href, label]) => h("a.btn.ghost.small", { href }, label))
     : []);
 }
 
@@ -143,6 +149,7 @@ async function pick(parts) {
       return mod.render(rest[0] === "up" ? "signup" : "signin");
     }
     case "friends": {
+      if (state.local) return notFound();
       requireUser();
       const mod = await SCREENS.friends();
       return mod.render();
@@ -163,8 +170,10 @@ async function pick(parts) {
       return mod.render({ game, mode: mode || "daily" });
     }
     case "puzzle": {
+      /* Left exactly as written: a shared code may be a short one the server
+       * looks up, or a whole puzzle packed into base64, where case matters. */
       const mod = await SCREENS.play();
-      return mod.render({ mode: "custom", code: String(rest[0] || "").toUpperCase() });
+      return mod.render({ mode: "custom", code: String(rest[0] || "") });
     }
     default:
       return notFound();
