@@ -1,0 +1,14 @@
+.git
+.github
+node_modules
+dist
+tests
+scripts
+data/store.json
+data/store.json.tmp
+data/store.json.corrupt-*
+*.log
+README.md
+fly.toml
+Dockerfile
+.dockerignore

@@ -1,0 +1,54 @@
+# Puzzle Club on Fly.io.
+#
+# Change `app` to the name you picked, then `fly deploy`. The README walks
+# through it; the parts worth understanding are commented here.
+
+app = "puzzle-club"
+primary_region = "syd"          # Sydney. `fly platform regions` lists the rest.
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+  HOST = "0.0.0.0"
+  DATA_FILE = "/data/store.json"
+  # Fly terminates TLS in front of the app, so the request the server sees is
+  # plain HTTP. This says the X-Forwarded-* headers can be believed, which is
+  # what lets the session cookie be marked Secure and the rate limiter see the
+  # real visitor rather than the proxy.
+  TRUST_PROXY = "1"
+
+# Accounts, streaks and puzzles live in one file, so it needs to outlive the
+# machine. Created with:
+#   fly volumes create puzzle_data --size 1 --region syd
+[[mounts]]
+  source = "puzzle_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true            # never serve the session cookie over plain HTTP
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  # The store is held in memory and written on change, so stopping the last
+  # machine is safe - but a suspended machine resumes with its memory intact
+  # and answers the first request faster.
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 200
+    hard_limit = 250
+
+# One check, hitting the endpoint that deliberately does not touch the store.
+[[http_service.checks]]
+  interval = "30s"
+  timeout = "5s"
+  grace_period = "10s"
+  method = "GET"
+  path = "/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"              # the word lists are about 100 MB once parsed

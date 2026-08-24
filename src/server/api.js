@@ -18,6 +18,7 @@
 const crypto = require("node:crypto");
 
 const auth = require("./auth.js");
+const limiter = require("./ratelimit.js");
 const stats = require("./stats.js");
 const games = require("./games/index.js");
 const { Router, fail } = require("./http.js");
@@ -211,6 +212,11 @@ function buildApi(store) {
     if (errors.length) fail(400, errors[0], { errors });
     if (auth.findByHandle(store, handle)) fail(409, "That username is taken.");
 
+    /* Counted here rather than on the way in, so that a rejected username or
+     * a too-short password costs nothing. Only accounts that get made count. */
+    const slow = limiter.take("signup:" + ctx.ip, limiter.SIGN_UP);
+    if (!slow.ok) fail(429, `That is a lot of new accounts from one place. Try again in ${Math.ceil(slow.retryAfter / 60)} minutes.`);
+
     const user = await auth.createUser(store, { handle, password: ctx.body.password, display });
 
     /* Attach the session they already had, so a round played as a guest is
@@ -227,9 +233,28 @@ function buildApi(store) {
   });
 
   router.post("/api/auth/login", async (ctx) => {
+    /*
+     * Limited by source and by target. The first stops one machine working
+     * through a password list; the second stops many machines working
+     * through one account.
+     */
+    const wanted = auth.normaliseHandle(ctx.body.handle);
+    const bySource = limiter.take("login:ip:" + ctx.ip, limiter.SIGN_IN_SOURCE);
+    const byTarget = limiter.take("login:who:" + wanted, limiter.SIGN_IN);
+    const slowest = !bySource.ok ? bySource : !byTarget.ok ? byTarget : null;
+
+    if (slowest) {
+      fail(429, `Too many attempts. Try again in ${Math.ceil(slowest.retryAfter / 60)} minutes.`);
+    }
+
     const user = auth.findByHandle(store, ctx.body.handle);
     const ok = await auth.verify(user, String(ctx.body.password || ""));
     if (!ok) fail(401, "That username and password do not match.");
+
+    /* Getting in clears the count, so one wrong guess before the right one
+     * never counts against the next visit. */
+    limiter.clear("login:ip:" + ctx.ip);
+    limiter.clear("login:who:" + wanted);
 
     const session = store.data.sessions[ctx.token];
     if (session) session.userId = user.id;

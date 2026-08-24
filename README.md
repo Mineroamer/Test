@@ -172,13 +172,71 @@ npm test
 whether an answer leaks before it should, whether a finished round can be
 counted twice, and each game played to a win.
 
-## Before putting it on the internet
+## Putting it on the internet
 
-It runs on `127.0.0.1` by default, which is the right place for it. If you
-move it somewhere public, put it behind a reverse proxy that terminates TLS —
-the session cookie is `HttpOnly` and `SameSite=Lax` but not `Secure`, and
-passwords should not cross a network in the clear. There is no rate limiting
-on the login route.
+It runs on `127.0.0.1` by default, which is the right place for it while you
+are working on it. To let friends in, it needs a host.
+
+### Fly.io
+
+`Dockerfile` and `fly.toml` are ready. From a clone of this repository:
+
+```bash
+fly auth signup                                   # or: fly auth login
+fly launch --no-deploy --name your-club-name      # rewrites app name in fly.toml
+fly volumes create puzzle_data --size 1 --region syd
+fly deploy
+fly open
+```
+
+Pick your own `--name` (it becomes `your-club-name.fly.dev`) and your own
+`--region` — `fly platform regions` lists them; use the same one for the
+volume and the app. A 1 GB volume is far more than this will ever need.
+
+Free-tier shared-cpu-1x with 512 MB is enough: the word lists take about
+100 MB once parsed, and there is nothing else in memory.
+
+**What the config does that matters.**
+
+- `[[mounts]]` puts the store on a volume, so accounts, streaks and puzzles
+  survive a deploy. Without it every deploy would start the club over.
+- `TRUST_PROXY=1` tells the app the `X-Forwarded-*` headers come from Fly's
+  proxy. That is what lets the session cookie be marked `Secure` and lets the
+  rate limiter see the real visitor rather than the proxy. It is off by
+  default, because believing those headers when anyone can set them would let
+  a client claim any address it liked.
+- `force_https` means the cookie is never sent over plain HTTP.
+- `docker-entrypoint.sh` takes ownership of the mounted volume before dropping
+  to an unprivileged user. Fly attaches volumes owned by root whatever the
+  image did at build time, so a non-root app cannot write to a fresh one until
+  this runs.
+- `auto_stop_machines` lets it sleep when nobody is playing. The store is
+  written on change, so stopping is safe.
+
+To back up the club: `fly ssh console -C "cat /data/store.json" > backup.json`.
+
+### Anywhere else
+
+Any host that runs a container will do, and so will a Raspberry Pi. Two things
+are not optional:
+
+- **Terminate TLS in front of it.** Passwords should not cross a network in
+  the clear. Set `TRUST_PROXY=1` only once something trustworthy is in front.
+- **Point `DATA_FILE` at persistent storage**, or the club resets whenever the
+  process moves.
+
+### What is already handled
+
+Sign-in is rate limited two ways: ten attempts per account per quarter hour,
+which is what actually protects a password, and sixty per address over the
+same window, which stops one machine spraying many accounts. The per-address
+limit is deliberately loose, because a school or a household looks like a
+single address from here and locking out a whole building because one person
+mistyped would be worse than the attack it prevents.
+
+Passwords are PBKDF2-SHA512 with a per-user salt, compared in constant time.
+Session tokens are opaque random bytes in an `HttpOnly` cookie. The `data/`
+directory is never served over HTTP.
 
 ---
 

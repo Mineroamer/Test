@@ -128,6 +128,31 @@ async function main() {
     assert.equal(me.body.user, null);
   });
 
+  await test("guessing a password gets throttled", async () => {
+    const attacker = client();
+    await attacker("GET", "/api/me");
+
+    let blocked = null;
+    /* The limiter allows ten in a quarter of an hour; the eleventh should be
+     * refused, and refused without saying whether the account exists. */
+    for (let i = 0; i < 14 && !blocked; i++) {
+      const { status, body } = await attacker("POST", "/api/auth/login", {
+        handle: "throttle_me", password: "guess number " + i,
+      });
+      if (status === 429) blocked = body;
+    }
+    assert.ok(blocked, "should stop letting attempts through");
+    assert.match(blocked.error, /Try again in/);
+
+    /* And the wall is around that account, not the whole server. */
+    const bystander = client();
+    await bystander("GET", "/api/me");
+    const { status } = await bystander("POST", "/api/auth/login", {
+      handle: "someone_else", password: "no",
+    });
+    assert.notEqual(status, 429, "a different account should still be reachable");
+  });
+
   await test("stats need an account", async () => {
     const guest = client();
     await guest("GET", "/api/me");
