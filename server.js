@@ -24,7 +24,6 @@ const HOST = process.env.HOST || "127.0.0.1";
 const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, "data", "store.json");
 
 const PUBLIC = path.resolve(__dirname, "public");
-const DATA_DIR = path.resolve(__dirname, "data");
 
 const store = new Store(DATA_FILE);
 store.load();
@@ -106,13 +105,13 @@ const server = http.createServer(async (req, res) => {
 
   if (issued) res.setHeader("set-cookie", sessionCookie(token));
 
-  /* Data files are served so the browser can load the map and the country
-   * list; everything else comes out of public/. */
-  if (pathname.startsWith("/data/")) {
-    if (serveStatic(req, res, [DATA_DIR], pathname.slice("/data/".length))) return;
-    return sendJson(req, res, 404, { error: "Not found." });
-  }
-
+  /*
+   * public/ is the only directory ever served. data/ is not, and must not be:
+   * it holds the store, and the store holds password hashes and live session
+   * tokens. The word lists in there are read from disk by the game engines,
+   * never fetched by the browser, so nothing is lost by keeping the whole
+   * directory off the web.
+   */
   if (pathname !== "/" && serveStatic(req, res, [PUBLIC], pathname)) return;
 
   /* Anything else is a route inside the app, so hand back the shell and let

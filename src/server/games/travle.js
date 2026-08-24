@@ -18,15 +18,24 @@ const Engine = require(path.join(__dirname, "..", "..", "..", "public", "js", "g
 
 const DEFAULT_DIFFICULTY = Engine.DEFAULT_MODE;
 
-const dailyPuzzle = (day, difficulty = DEFAULT_DIFFICULTY) => ({
-  ...Engine.puzzleForDay(day, difficulty),
-  difficulty,
-});
+/* Only some levels deal a daily route; anything else falls back to standard so
+ * a stale setting cannot ask for a puzzle that does not exist. */
+const dailyLevel = (key) => {
+  const mode = Engine.DIFFICULTIES[key];
+  return mode && mode.daily ? key : DEFAULT_DIFFICULTY;
+};
 
-const randomPuzzle = (seed, difficulty = "unlimited") => ({
-  ...Engine.randomPuzzle(difficulty, rngFor("travle:free:" + seed)),
-  difficulty,
-});
+const freeLevel = (key) => (Engine.DIFFICULTIES[key] ? key : "unlimited");
+
+const dailyPuzzle = (day, difficulty) => {
+  const level = dailyLevel(difficulty);
+  return { ...Engine.puzzleForDay(day, level), difficulty: level };
+};
+
+const randomPuzzle = (seed, difficulty) => {
+  const level = freeLevel(difficulty);
+  return { ...Engine.randomPuzzle(level, rngFor("travle:free:" + seed)), difficulty: level };
+};
 
 function validateCustom(payload) {
   const errors = [];

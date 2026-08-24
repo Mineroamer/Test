@@ -577,6 +577,22 @@ async function main() {
     if (travleRun) assert.ok(Array.isArray(travleRun.state.dead), "sets must be stored as arrays");
   });
 
+  await test("the store is not reachable over HTTP", async () => {
+    /* It holds password hashes and live session tokens. Serving data/ once
+     * put the whole thing one GET away, so this is pinned down here. */
+    for (const url of [
+      "/data/store.json",
+      "/data/wordle-answers.json",
+      "/../data/store.json",
+      "/data/../data/store.json",
+    ]) {
+      const res = await fetch(base + url, { redirect: "manual" });
+      const body = await res.text();
+      assert.equal(body.includes("passwordHash"), false, `${url} served the store`);
+      assert.equal(body.includes("wordle-answers"), false, `${url} served a data file`);
+    }
+  });
+
   await test("a password is never written to disk in the clear", async () => {
     const raw = fs.readFileSync(STORE, "utf8");
     assert.equal(raw.includes("correct horse"), false);

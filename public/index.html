@@ -1,1 +1,48 @@
-<!doctype html><title>placeholder</title><h1>Puzzle Club</h1>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Puzzle Club</title>
+<meta name="description" content="Wordle, Connections, Spelling Bee, Letter Boxed and Travle Overland. A new set every day, unlimited play whenever you want, and puzzles you can build for your friends.">
+<meta name="theme-color" content="#0b6e75">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%277%27 fill=%27%230b6e75%27/%3E%3Crect x=%277%27 y=%277%27 width=%278%27 height=%278%27 rx=%271.5%27 fill=%27%23fff%27/%3E%3Crect x=%2717%27 y=%277%27 width=%278%27 height=%278%27 rx=%271.5%27 fill=%27%23fff%27 opacity=%27.45%27/%3E%3Crect x=%277%27 y=%2717%27 width=%278%27 height=%278%27 rx=%271.5%27 fill=%27%23fff%27 opacity=%27.45%27/%3E%3Crect x=%2717%27 y=%2717%27 width=%278%27 height=%278%27 rx=%271.5%27 fill=%27%23fff%27/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,400..800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/css/app.css">
+<link rel="stylesheet" href="/css/travle.css">
+</head>
+<body>
+
+<div id="app">
+  <header class="bar">
+    <a class="wordmark" href="#/" data-link>
+      <span class="dot" aria-hidden="true">PC</span>
+      <span>Puzzle Club</span>
+    </a>
+    <nav id="nav" class="row" aria-label="Sections"></nav>
+    <span class="grow"></span>
+    <button class="ghost icon" id="theme-toggle" title="Switch theme" aria-label="Switch theme"></button>
+    <button class="ghost small" id="account-button">Sign in</button>
+  </header>
+
+  <main id="screen" aria-live="polite">
+    <div class="spinner" role="status" aria-label="Loading"></div>
+  </main>
+</div>
+
+<!--
+  The Travle engine and its map are plain scripts that publish globals, exactly
+  as they did in the standalone game. They are loaded up front because the map
+  geometry is the one asset worth having ready before it is asked for.
+-->
+<script src="/js/games/travle/countries.js"></script>
+<script src="/js/games/travle/map-data.js"></script>
+<script src="/js/games/travle/engine.js"></script>
+<script src="/js/games/travle/worldmap.js"></script>
+
+<script type="module" src="/js/app.js"></script>
+
+</body>
+</html>
