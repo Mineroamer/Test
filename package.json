@@ -1,0 +1,18 @@
+{
+  "name": "puzzle-club",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Daily and unlimited word, letter and geography puzzles, with accounts, friends and shareable puzzles of your own.",
+  "type": "commonjs",
+  "main": "server.js",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node tests/run.js",
+    "build:data": "node scripts/build-data.mjs"
+  },
+  "devDependencies": {
+    "word-list": "^4.0.0",
+    "wordlist-english": "^2.1.0"
+  }
+}
