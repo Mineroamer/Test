@@ -319,7 +319,7 @@ export const api = {
   logout: async () => { state.player = null; save(); return { ok: true }; },
   rename: async (display) => api.signup({ display }),
 
-  play: async (game, { mode, code, difficulty } = {}) => {
+  play: async (game, { mode, code, difficulty, fresh } = {}) => {
     const engine = games[game];
     if (!engine) throw new ApiError(404, "No such game.");
 
@@ -337,7 +337,16 @@ export const api = {
       run = Object.values(state.runs).find((r) => r.mode === "custom" && r.code === code);
       if (!run) run = start({ game, mode: kind, code });
     } else {
-      run = start({ game, mode: kind, seed: Math.random().toString(36).slice(2), difficulty });
+      /* The same rule as the server's: unlimited deals a new puzzle when you
+       * ask for one, and opening the page is not asking. Reloading the tab
+       * used to throw away whatever round was in progress. */
+      run = fresh ? null : Object.values(state.runs).find((r) =>
+        r.game === game && r.mode === "unlimited" && !r.recorded
+        && (r.difficulty || null) === (difficulty || null));
+
+      if (!run) {
+        run = start({ game, mode: kind, seed: Math.random().toString(36).slice(2), difficulty });
+      }
     }
 
     prune();

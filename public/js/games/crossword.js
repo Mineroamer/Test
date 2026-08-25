@@ -25,6 +25,27 @@ export function create(ctx) {
   let across = true;
   let wrong = new Set();
 
+  /*
+   * Letters typed but not yet confirmed by the server.
+   *
+   * The cursor used to advance only when a reply came back, so anyone typing
+   * at a normal speed put every letter of a word into the same square: five
+   * keystrokes went out against one cursor position and the last one won.
+   * A crossword you cannot type into is not a crossword.
+   *
+   * So a keystroke now moves the cursor and shows the letter immediately, and
+   * the server is told afterwards. What is drawn is this overlay on top of the
+   * server's grid; each entry is dropped as its reply lands.
+   */
+  const pending = new Map();
+
+  /*
+   * Replies are chained rather than fired off in parallel. Every reply carries
+   * the whole grid, so two of them landing out of order would leave the older
+   * one painted - a letter vanishing a moment after you typed it.
+   */
+  let queue = Promise.resolve();
+
   const grid = h("div.xw-grid", { style: { "--size": size } });
   const clueBar = h("button.xw-cluebar", { onClick: nextEntry });
   const acrossList = h("div.xw-clues");
@@ -48,7 +69,6 @@ export function create(ctx) {
     focusCell: () => cursor,
     controls: () => h("button.small", { onClick: () => ctx.actions.check(wordCells()) }, "Check word"),
     update(next, result) {
-      const was = run;
       run = next;
 
       if (result && result.wrong) {
@@ -65,9 +85,20 @@ export function create(ctx) {
       }
       if (result && result.letter !== undefined) {
         wrong.delete(result.cell);
-        /* Typing moves you on; clearing leaves you where you are. */
-        if (result.letter !== EMPTY && was.puzzle.status === "playing") step(1);
+        /* The cursor moved when the key was pressed, so nothing to do here but
+         * let go of the letter now that the server has it. */
+        pending.delete(result.cell);
       }
+      paint();
+    },
+    /*
+     * A letter the server would not take - typed into a square that was given
+     * away by a hint, or after the round ended. Without this the overlay would
+     * keep showing it and the grid would quietly disagree with the server, so
+     * everything unconfirmed is dropped and the server's grid is drawn.
+     */
+    reject() {
+      pending.clear();
       paint();
     },
     outcome: (r) => r.puzzle.answers
@@ -85,6 +116,11 @@ export function create(ctx) {
 
   function isBlack(cell) {
     return run.puzzle.grid[cell] === BLACK;
+  }
+
+  /** What a square shows: what you just typed, or what the server has. */
+  function letterAt(cell) {
+    return pending.has(cell) ? pending.get(cell) : run.puzzle.letters[cell];
   }
 
   function numberAt() {
@@ -114,7 +150,7 @@ export function create(ctx) {
     swap(grid, [...puzzle.grid].map((square, cell) => {
       if (square === BLACK) return h("div.xw-cell.black");
 
-      const letter = puzzle.letters[cell];
+      const letter = letterAt(cell);
       return h("button.xw-cell", {
         class: [
           cell === cursor ? "cursor" : "",
@@ -175,6 +211,29 @@ export function create(ctx) {
     paint();
   }
 
+  /*
+   * Put a letter in, or take one out.
+   *
+   * Both do the same three things in the same order: change what is on screen,
+   * move the cursor, then queue the server. The player never waits.
+   */
+  function typeInto(cell, letter) {
+    pending.set(cell, letter);
+    step(1);
+    paint();
+    send(() => ctx.actions.guess({ cell, letter }));
+  }
+
+  function clearAt(cell) {
+    pending.set(cell, EMPTY);
+    paint();
+    send(() => ctx.actions.guess({ cell, clear: true }));
+  }
+
+  function send(go) {
+    queue = queue.then(go).catch(() => { /* play.js has already said so */ });
+  }
+
   /** Move along the current word, hopping to the next word at the end. */
   function step(delta) {
     const entry = currentEntry();
@@ -193,7 +252,7 @@ export function create(ctx) {
     const following = entries[(at + 1) % entries.length];
 
     across = following.across;
-    cursor = following.cells.find((cell) => run.puzzle.letters[cell] === EMPTY) ?? following.cells[0];
+    cursor = following.cells.find((cell) => letterAt(cell) === EMPTY) ?? following.cells[0];
     paint();
   }
 
@@ -223,15 +282,15 @@ export function create(ctx) {
 
       if (/^[a-zA-Z]$/.test(event.key)) {
         event.preventDefault();
-        ctx.actions.guess({ cell: cursor, letter: event.key.toUpperCase() });
+        typeInto(cursor, event.key.toUpperCase());
         return;
       }
       switch (event.key) {
         case "Backspace":
           event.preventDefault();
           /* Clear where you are; if it is already empty, back up and clear. */
-          if (run.puzzle.letters[cursor] === EMPTY) step(-1);
-          ctx.actions.guess({ cell: cursor, clear: true });
+          if (letterAt(cursor) === EMPTY) step(-1);
+          clearAt(cursor);
           break;
         case "ArrowUp": event.preventDefault(); arrow(-1, 0); break;
         case "ArrowDown": event.preventDefault(); arrow(1, 0); break;
@@ -268,16 +327,18 @@ export function create(ctx) {
     catcher.addEventListener("input", () => {
       const typed = catcher.value.replace(/[^a-zA-Z]/g, "").toUpperCase();
       catcher.value = "";
-      if (typed && run.puzzle.status === "playing") {
-        ctx.actions.guess({ cell: cursor, letter: typed[typed.length - 1] });
-      }
+      /* A phone keyboard can deliver several characters in one event - an
+       * autocorrect, or a fast thumb - so every one of them is laid down
+       * rather than only the last. */
+      if (run.puzzle.status !== "playing") return;
+      for (const letter of typed) typeInto(cursor, letter);
     });
     /* On a phone Backspace on an empty field does not fire `input`. */
     catcher.addEventListener("keydown", (event) => {
       if (event.key !== "Backspace") return;
       event.preventDefault();
-      if (run.puzzle.letters[cursor] === EMPTY) step(-1);
-      ctx.actions.guess({ cell: cursor, clear: true });
+      if (letterAt(cursor) === EMPTY) step(-1);
+      clearAt(cursor);
     });
 
     el.append(catcher);

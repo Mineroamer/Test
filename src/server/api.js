@@ -344,14 +344,35 @@ function buildApi(store) {
       run = existingRun(store, ctx, { game: game.key, mode: "custom", code });
       if (!run) run = newRun({ game: game.key, mode, owner, code, difficulty: record.payload.difficulty });
     } else {
-      /* A fresh seed each time is exactly what "unlimited" means. */
-      run = newRun({
-        game: game.key,
-        mode,
-        owner,
-        seed: crypto.randomBytes(8).toString("hex"),
-        difficulty,
-      });
+      /*
+       * Unlimited means a new puzzle whenever you ask for one - and a page
+       * refresh is not asking for one.
+       *
+       * This used to mint a fresh seed on every call, so reloading the tab
+       * silently abandoned the round in progress and dealt another. On a
+       * Wordle that is a shrug; on a 15x15 crossword it is twenty minutes of
+       * somebody's work thrown away because they turned their phone over.
+       *
+       * So an unfinished round is resumed, and only an explicit "Another" -
+       * which sends `fresh` - deals a new one.
+       */
+      run = ctx.body.fresh
+        ? null
+        : existingRun(store, ctx, {
+            game: game.key, mode: "unlimited", difficulty: difficulty ?? undefined,
+          });
+
+      if (run && run.recorded) run = null;   // that one is over; deal another
+
+      if (!run) {
+        run = newRun({
+          game: game.key,
+          mode,
+          owner,
+          seed: crypto.randomBytes(8).toString("hex"),
+          difficulty,
+        });
+      }
     }
 
     pruneRuns(store, owner);

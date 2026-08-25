@@ -218,17 +218,41 @@ async function main() {
     assert.equal(second.body.run.puzzle.guesses.length, 1, "the guess is still there");
   });
 
-  await test("unlimited deals a new round every time", async () => {
+  await test("unlimited deals a new round when asked, and resumes when not", async () => {
+    /*
+     * "Unlimited" means a new puzzle whenever you ask for one - and opening
+     * the page is not asking for one. This used to mint a fresh round on every
+     * call, so reloading the tab silently abandoned the round in progress: on
+     * a 15x15 crossword, twenty minutes of somebody's work gone because they
+     * turned their phone over.
+     */
     const seen = new Set();
     for (let i = 0; i < 5; i++) {
-      const { body } = await alice("POST", "/api/play/wordle", { mode: "unlimited" });
+      const { body } = await alice("POST", "/api/play/wordle", { mode: "unlimited", fresh: true });
       seen.add(body.run.id);
     }
-    assert.equal(seen.size, 5);
+    assert.equal(seen.size, 5, "asking outright should deal a new one each time");
+
+    const opened = await alice("POST", "/api/play/wordle", { mode: "unlimited", fresh: true });
+    await alice("POST", `/api/runs/${opened.body.run.id}/guess`, { value: "crane" });
+
+    const reloaded = await alice("POST", "/api/play/wordle", { mode: "unlimited" });
+    assert.equal(reloaded.body.run.id, opened.body.run.id, "a reload should come back to the same round");
+    assert.equal(reloaded.body.run.puzzle.guesses.length, 1, "with the guess still in it");
+  });
+
+  await test("a finished unlimited round is not resumed", async () => {
+    const { body } = await alice("POST", "/api/play/wordle", { mode: "unlimited", fresh: true });
+    const answer = answerTo(body.run.id).answer;
+    const done = await alice("POST", `/api/runs/${body.run.id}/guess`, { value: answer });
+    assert.equal(done.body.run.puzzle.status, "won");
+
+    const next = await alice("POST", "/api/play/wordle", { mode: "unlimited" });
+    assert.notEqual(next.body.run.id, body.run.id, "a round that is over should not come back");
   });
 
   await test("the answer is withheld until the round is over", async () => {
-    const { body } = await alice("POST", "/api/play/wordle", { mode: "unlimited" });
+    const { body } = await alice("POST", "/api/play/wordle", { mode: "unlimited", fresh: true });
     assert.equal(body.run.puzzle.answer, null);
     const guess = await alice("POST", `/api/runs/${body.run.id}/guess`, { value: "crane" });
     assert.equal(guess.body.run.puzzle.answer, null, "still hidden mid-round");
@@ -237,14 +261,14 @@ async function main() {
   });
 
   await test("a word outside the list is refused and costs nothing", async () => {
-    const { body } = await alice("POST", "/api/play/wordle", { mode: "unlimited" });
+    const { body } = await alice("POST", "/api/play/wordle", { mode: "unlimited", fresh: true });
     const { body: guess } = await alice("POST", `/api/runs/${body.run.id}/guess`, { value: "zzzzz" });
     assert.equal(guess.result.ok, false);
     assert.equal(guess.run.puzzle.guesses.length, 0);
   });
 
   await test("running out of guesses reveals the answer, and only then", async () => {
-    const { body } = await alice("POST", "/api/play/wordle", { mode: "unlimited" });
+    const { body } = await alice("POST", "/api/play/wordle", { mode: "unlimited", fresh: true });
     const id = body.run.id;
     const answer = answerTo(id).answer;
     const spend = ["zonal", "crumb", "digit", "wharf", "spilt", "mucky", "bevel", "joker"]
@@ -261,7 +285,7 @@ async function main() {
   });
 
   await test("a hint is recorded against the round", async () => {
-    const { body } = await alice("POST", "/api/play/wordle", { mode: "unlimited" });
+    const { body } = await alice("POST", "/api/play/wordle", { mode: "unlimited", fresh: true });
     const { body: hinted } = await alice("POST", `/api/runs/${body.run.id}/hint`);
     assert.equal(hinted.result.ok, true);
     assert.equal(hinted.run.puzzle.hints.length, 1);
@@ -298,7 +322,7 @@ async function main() {
   });
 
   await test("connections reports a near miss", async () => {
-    const { body } = await alice("POST", "/api/play/connections", { mode: "unlimited" });
+    const { body } = await alice("POST", "/api/play/connections", { mode: "unlimited", fresh: true });
     const puzzle = answerTo(body.run.id);
     const near = [...puzzle.groups[0].words.slice(0, 3), puzzle.groups[1].words[0]];
 
@@ -312,7 +336,7 @@ async function main() {
   });
 
   await test("connections ends after four mistakes", async () => {
-    const { body } = await alice("POST", "/api/play/connections", { mode: "unlimited" });
+    const { body } = await alice("POST", "/api/play/connections", { mode: "unlimited", fresh: true });
     const puzzle = answerTo(body.run.id);
     let last = null;
     /* Four different wrong picks, one from each group each time. */
@@ -325,7 +349,7 @@ async function main() {
   });
 
   await test("travle walks a route and can step back", async () => {
-    const { body } = await alice("POST", "/api/play/travle", { mode: "unlimited" });
+    const { body } = await alice("POST", "/api/play/travle", { mode: "unlimited", fresh: true });
     const puzzle = answerTo(body.run.id);
     const route = games.get("travle").Engine.shortestRoute(puzzle.start, puzzle.end);
 
@@ -339,14 +363,14 @@ async function main() {
   });
 
   await test("travle names a country by any of its aliases", async () => {
-    const { body } = await alice("POST", "/api/play/travle", { mode: "unlimited" });
+    const { body } = await alice("POST", "/api/play/travle", { mode: "unlimited", fresh: true });
     const { body: nonsense } = await alice("POST", `/api/runs/${body.run.id}/guess`, { value: "Narnia" });
     assert.equal(nonsense.result.ok, false);
     assert.match(nonsense.result.message, /No country/);
   });
 
   await test("letter boxed accepts its own solution", async () => {
-    const { body } = await alice("POST", "/api/play/boxed", { mode: "unlimited" });
+    const { body } = await alice("POST", "/api/play/boxed", { mode: "unlimited", fresh: true });
     const puzzle = answerTo(body.run.id);
     for (const word of puzzle.solution) {
       const { body: played } = await alice("POST", `/api/runs/${body.run.id}/guess`, { value: word });
@@ -357,7 +381,7 @@ async function main() {
   });
 
   await test("letter boxed refuses two letters from one side", async () => {
-    const { body } = await alice("POST", "/api/play/boxed", { mode: "unlimited" });
+    const { body } = await alice("POST", "/api/play/boxed", { mode: "unlimited", fresh: true });
     const puzzle = answerTo(body.run.id);
     const sameSide = puzzle.sides[0][0] + puzzle.sides[0][1] + puzzle.sides[1][0];
     const { body: played } = await alice("POST", `/api/runs/${body.run.id}/guess`, { value: sameSide });
@@ -366,7 +390,7 @@ async function main() {
   });
 
   await test("the bee scores a pangram at length plus seven", async () => {
-    const { body } = await alice("POST", "/api/play/bee", { mode: "unlimited" });
+    const { body } = await alice("POST", "/api/play/bee", { mode: "unlimited", fresh: true });
     const pangram = answerTo(body.run.id).pangrams[0];
     const { body: played } = await alice("POST", `/api/runs/${body.run.id}/guess`, { value: pangram });
     assert.equal(played.result.pangram, true);
@@ -374,7 +398,7 @@ async function main() {
   });
 
   await test("the bee insists on the centre letter", async () => {
-    const { body } = await alice("POST", "/api/play/bee", { mode: "unlimited" });
+    const { body } = await alice("POST", "/api/play/bee", { mode: "unlimited", fresh: true });
     const puzzle = answerTo(body.run.id);
     const without = puzzle.answers.find((w) => !w.includes(puzzle.centre));
     assert.equal(without, undefined, "no answer should be missing the centre letter");
@@ -385,7 +409,7 @@ async function main() {
 
   await test("both crosswords deal a filled, clued grid", async () => {
     for (const key of ["mini", "crossword"]) {
-      const { body } = await alice("POST", `/api/play/${key}`, { mode: "unlimited" });
+      const { body } = await alice("POST", `/api/play/${key}`, { mode: "unlimited", fresh: true });
       const puzzle = body.run.puzzle;
 
       assert.equal(puzzle.size, key === "mini" ? 5 : 15);
@@ -428,7 +452,7 @@ async function main() {
   });
 
   await test("a crossword can be typed into and solved", async () => {
-    const { body } = await alice("POST", "/api/play/mini", { mode: "unlimited" });
+    const { body } = await alice("POST", "/api/play/mini", { mode: "unlimited", fresh: true });
     const id = body.run.id;
     const real = answerTo(id);
 
@@ -456,7 +480,7 @@ async function main() {
   });
 
   await test("a crossword hint fills the square you are looking at", async () => {
-    const { body } = await alice("POST", "/api/play/mini", { mode: "unlimited" });
+    const { body } = await alice("POST", "/api/play/mini", { mode: "unlimited", fresh: true });
     const real = answerTo(body.run.id);
     const target = [...real.grid].findIndex((c) => c !== "#");
 
@@ -472,7 +496,7 @@ async function main() {
   });
 
   await test("giving up on a crossword shows the whole grid", async () => {
-    const { body } = await alice("POST", "/api/play/mini", { mode: "unlimited" });
+    const { body } = await alice("POST", "/api/play/mini", { mode: "unlimited", fresh: true });
     const real = answerTo(body.run.id);
     const { body: given } = await alice("POST", `/api/runs/${body.run.id}/reveal`, {});
 
@@ -482,7 +506,7 @@ async function main() {
   });
 
   await test("strands deals a themed board using every square", async () => {
-    const { body } = await alice("POST", "/api/play/strands", { mode: "unlimited" });
+    const { body } = await alice("POST", "/api/play/strands", { mode: "unlimited", fresh: true });
     const puzzle = body.run.puzzle;
 
     assert.equal(puzzle.letters.length, puzzle.rows * puzzle.cols);
@@ -498,7 +522,7 @@ async function main() {
   });
 
   await test("strands accepts a traced word and refuses a broken path", async () => {
-    const { body } = await alice("POST", "/api/play/strands", { mode: "unlimited" });
+    const { body } = await alice("POST", "/api/play/strands", { mode: "unlimited", fresh: true });
     const real = answerTo(body.run.id);
     const entry = real.entries[1];
 
@@ -515,14 +539,14 @@ async function main() {
   });
 
   await test("strands hints have to be earned", async () => {
-    const { body } = await alice("POST", "/api/play/strands", { mode: "unlimited" });
+    const { body } = await alice("POST", "/api/play/strands", { mode: "unlimited", fresh: true });
     const { body: early } = await alice("POST", `/api/runs/${body.run.id}/hint`, {});
     assert.equal(early.result.ok, false);
     assert.match(early.result.message, /earn a hint/);
   });
 
   await test("pips deals a board with exactly one answer", async () => {
-    const { body } = await alice("POST", "/api/play/pips", { mode: "unlimited" });
+    const { body } = await alice("POST", "/api/play/pips", { mode: "unlimited", fresh: true });
     const puzzle = body.run.puzzle;
 
     assert.ok(puzzle.dominoes.length >= 5);
@@ -541,7 +565,7 @@ async function main() {
   });
 
   await test("giving up on pips lays out the whole answer", async () => {
-    const { body } = await alice("POST", "/api/play/pips", { mode: "unlimited" });
+    const { body } = await alice("POST", "/api/play/pips", { mode: "unlimited", fresh: true });
     const real = answerTo(body.run.id);
     const { body: given } = await alice("POST", `/api/runs/${body.run.id}/reveal`, {});
 
@@ -556,7 +580,7 @@ async function main() {
   });
 
   await test("pips refuses illegal placements", async () => {
-    const { body } = await alice("POST", "/api/play/pips", { mode: "unlimited" });
+    const { body } = await alice("POST", "/api/play/pips", { mode: "unlimited", fresh: true });
     const id = body.run.id;
 
     for (const [why, move] of [
@@ -571,7 +595,7 @@ async function main() {
   });
 
   await test("pips can be solved, and a lifted domino frees its squares", async () => {
-    const { body } = await alice("POST", "/api/play/pips", { mode: "unlimited" });
+    const { body } = await alice("POST", "/api/play/pips", { mode: "unlimited", fresh: true });
     const id = body.run.id;
     const real = answerTo(body.run.id);
     const answer = new Map(real.solution);
@@ -600,7 +624,7 @@ async function main() {
     assert.equal(last.run.puzzle.status, "won");
 
     /* And a domino can be taken back off a board still in play. */
-    const other = await alice("POST", "/api/play/pips", { mode: "unlimited" });
+    const other = await alice("POST", "/api/play/pips", { mode: "unlimited", fresh: true });
     const first = other.body.run.puzzle.cells[0].split(",").map(Number);
     const beside = other.body.run.puzzle.cells.find((key) => {
       const [r, c] = key.split(",").map(Number);
@@ -617,7 +641,7 @@ async function main() {
   });
 
   await test("one player cannot open another's round", async () => {
-    const { body } = await alice("POST", "/api/play/wordle", { mode: "unlimited" });
+    const { body } = await alice("POST", "/api/play/wordle", { mode: "unlimited", fresh: true });
     const stranger = client();
     await stranger("GET", "/api/me");
     assert.equal((await stranger("GET", `/api/runs/${body.run.id}`)).status, 403);
@@ -631,7 +655,7 @@ async function main() {
     const before = await alice("GET", "/api/stats");
     const played = before.body.games["wordle:unlimited"].played;
 
-    const { body } = await alice("POST", "/api/play/wordle", { mode: "unlimited" });
+    const { body } = await alice("POST", "/api/play/wordle", { mode: "unlimited", fresh: true });
     await alice("POST", `/api/runs/${body.run.id}/guess`, { value: answerTo(body.run.id).answer });
 
     const after = await alice("GET", "/api/stats");
@@ -641,7 +665,7 @@ async function main() {
   });
 
   await test("a win in one guess lands in the distribution", async () => {
-    const { body } = await alice("POST", "/api/play/wordle", { mode: "unlimited" });
+    const { body } = await alice("POST", "/api/play/wordle", { mode: "unlimited", fresh: true });
     await alice("POST", `/api/runs/${body.run.id}/guess`, { value: answerTo(body.run.id).answer });
     const { body: stats } = await alice("GET", "/api/stats");
     assert.ok(stats.games["wordle:unlimited"].distribution["1"] >= 1);
@@ -649,7 +673,7 @@ async function main() {
   });
 
   await test("a finished round is not counted twice", async () => {
-    const { body } = await alice("POST", "/api/play/travle", { mode: "unlimited" });
+    const { body } = await alice("POST", "/api/play/travle", { mode: "unlimited", fresh: true });
     const puzzle = answerTo(body.run.id);
     for (const code of games.get("travle").Engine.shortestRoute(puzzle.start, puzzle.end).slice(1)) {
       await alice("POST", `/api/runs/${body.run.id}/guess`, { value: code });
@@ -740,7 +764,7 @@ async function main() {
   });
 
   await test("a friend's activity appears in the feed", async () => {
-    const { body } = await bob("POST", "/api/play/wordle", { mode: "unlimited" });
+    const { body } = await bob("POST", "/api/play/wordle", { mode: "unlimited", fresh: true });
     await bob("POST", `/api/runs/${body.run.id}/guess`, { value: answerTo(body.run.id).answer });
 
     const { body: friends } = await alice("GET", "/api/friends");
@@ -1055,7 +1079,7 @@ async function main() {
     assert.equal(before.body.pass.xp, 0);
     assert.equal(before.body.pass.level, 1);
 
-    const run = await player("POST", "/api/play/wordle", { mode: "unlimited" });
+    const run = await player("POST", "/api/play/wordle", { mode: "unlimited", fresh: true });
     const answer = answerTo(run.body.run.id).answer;
     const done = await player("POST", `/api/runs/${run.body.run.id}/guess`, { value: answer });
 
@@ -1068,7 +1092,7 @@ async function main() {
     /* A guest plays the same round and is given nothing to record. */
     const guest = client();
     await guest("GET", "/api/me");
-    const theirs = await guest("POST", "/api/play/wordle", { mode: "unlimited" });
+    const theirs = await guest("POST", "/api/play/wordle", { mode: "unlimited", fresh: true });
     const guestAnswer = answerTo(theirs.body.run.id).answer;
     const over = await guest("POST", `/api/runs/${theirs.body.run.id}/guess`, { value: guestAnswer });
     assert.equal(over.body.run.earned, null, "a guest has nowhere to put XP");
@@ -1080,7 +1104,7 @@ async function main() {
     await player("GET", "/api/me");
     await player("POST", "/api/auth/signup", { handle: "twice", password: "count me once" });
 
-    const run = await player("POST", "/api/play/wordle", { mode: "unlimited" });
+    const run = await player("POST", "/api/play/wordle", { mode: "unlimited", fresh: true });
     const answer = answerTo(run.body.run.id).answer;
     await player("POST", `/api/runs/${run.body.run.id}/guess`, { value: answer });
 
@@ -1167,7 +1191,7 @@ async function main() {
     await player("GET", "/api/me");
     await player("POST", "/api/auth/signup", { handle: "lastweek", password: "long time ago" });
 
-    const run = await player("POST", "/api/play/wordle", { mode: "unlimited" });
+    const run = await player("POST", "/api/play/wordle", { mode: "unlimited", fresh: true });
     await player("POST", `/api/runs/${run.body.run.id}/guess`, { value: answerTo(run.body.run.id).answer });
 
     const me = (await player("GET", "/api/me")).body.user;
@@ -1224,7 +1248,7 @@ async function main() {
   await test("a guest's round carries over when they sign up", async () => {
     const guest = client();
     await guest("GET", "/api/me");
-    const { body } = await guest("POST", "/api/play/wordle", { mode: "unlimited" });
+    const { body } = await guest("POST", "/api/play/wordle", { mode: "unlimited", fresh: true });
     await guest("POST", `/api/runs/${body.run.id}/guess`, { value: "crane" });
     await guest("POST", "/api/auth/signup", { handle: "dana", password: "keep my round" });
 

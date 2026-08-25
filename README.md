@@ -181,6 +181,19 @@ already added you, that just means yes.
 The standings rank on daily wins, then streak, then fewest hints. Unlimited
 rounds are deliberately left out — they would only measure spare time.
 
+### Playing Pips
+
+Tap a domino to pick it up, tap it again to turn it a quarter turn clockwise,
+and drag it onto the board. The square under your finger is where the first
+half lands and the second follows in whichever direction the domino points, so
+what is under your hand is what you get.
+
+A domino has four positions, not two — right, down, left and up. Which end
+lands where is usually the whole puzzle, and a "flip" that only swapped
+horizontal for vertical could not express half the placements. Every drag also
+has a tap-only equivalent (pick up, turn, tap a square), because a drag is not
+available to somebody using a keyboard.
+
 ## XP, the pass and the board
 
 Every finished round is worth XP, and the amount depends on how the round went
@@ -267,7 +280,7 @@ public/                the browser app: no build step, no framework
   js/character.js      the wardrobe, drawn: every cosmetic as SVG paths
   js/screens/pass.js   the fifty-tier track and the wardrobe
   js/screens/board.js  the universal leaderboard
-tests/run.js           87 tests over the real HTTP server
+tests/run.js           88 tests over the real HTTP server
 tests/play.js          15 tests that play every game through to a finish
 scripts/build-data.mjs regenerates data/ from the source word lists
 scripts/build-artifact.mjs packs everything into one static HTML file
@@ -299,9 +312,9 @@ the home screen is the real time until that happens.
 npm test
 ```
 
-102 tests, in two suites, both against the real HTTP server.
+103 tests, in two suites, both against the real HTTP server.
 
-`tests/run.js` is 87 tests on the machinery: sessions, resuming a round, whether
+`tests/run.js` is 88 tests on the machinery: sessions, resuming a round, whether
 an answer leaks before it should, whether a finished round can be counted twice,
 whether two people racing for one username can both have it, whether the store
 is reachable over HTTP (it is not, and it holds password hashes), and whether a

@@ -349,6 +349,20 @@ button:hover, .btn:hover { border-color: var(--game); box-shadow: var(--shadow);
 button:active, .btn:active { transform: translateY(1px) scale(0.985); }
 button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 
+/*
+ * A finished board is not a disabled control - it is the thing you just spent
+ * ten minutes on, and the first thing you do is look at it. Fading it to 45%
+ * took the region tints and the pips off a solved Pips board entirely, so it
+ * ended every round by going blank.
+ */
+.pip-cell:disabled,
+.xw-cell:disabled,
+.st-cell:disabled,
+.conn-cell:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
 button.primary, .btn.primary {
   background: var(--game);
   border-color: var(--game);
@@ -920,9 +934,22 @@ label.field > span { font-size: 0.82rem; font-weight: 600; color: var(--ink-soft
   background: var(--surface-raised);
   box-shadow: inset 0 0 0 1px var(--ink);
 }
-.pip-cell.anchor { border-color: var(--game); box-shadow: 0 0 0 3px var(--game-wash); }
 .pip-cell.broken { border-color: var(--off); }
 .pip-cell.given { border-style: dashed; }
+
+/* Where a dragged domino would land, and where it would not fit. */
+.pip-cell.target {
+  border-color: var(--game);
+  box-shadow: 0 0 0 3px var(--game-wash);
+  transform: scale(1.04);
+}
+.pip-cell.no {
+  border-color: var(--off);
+  box-shadow: 0 0 0 3px var(--off-wash);
+}
+/* Squares must not swallow the drag as a scroll gesture on a touchscreen. */
+.pip-board.dragging { cursor: grabbing; }
+.pip-cell { touch-action: manipulation; }
 
 .pip-rule {
   position: absolute;
@@ -936,16 +963,43 @@ label.field > span { font-size: 0.82rem; font-weight: 600; color: var(--ink-soft
   pointer-events: none;
 }
 
-/* A domino face: three by three, with the dots that are lit shown. */
+/*
+ * A domino face: three by three, with the dots that are lit shown.
+ *
+ * Both dimensions are stated, and so are the rows. Columns alone left the
+ * three rows to be sized by their contents - and the contents are empty
+ * elements, so the whole face collapsed to about a pixel. In the tray it
+ * survived because the half it sits in is a fixed 26px box; on the board there
+ * was nothing to hold it open, so every domino placed on the board showed up
+ * as a blank square. A game about which numbers sit where, drawing no numbers.
+ */
 .pip-face {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 1px;
-  width: 66%;
-  aspect-ratio: 1;
+  grid-template-rows: repeat(3, 1fr);
+  gap: 8%;
+  width: 62%;
+  height: 62%;
+  min-width: 0;
+  min-height: 0;
 }
 .pip-face i { border-radius: 50%; background: transparent; }
 .pip-face i.on { background: var(--ink); }
+
+/*
+ * On the board the face is positioned rather than sized in percentages. The
+ * square centres its contents, and a centred grid item gives a percentage
+ * height nothing definite to measure against - so `height: 62%` came out as
+ * nothing at all. Insetting from the square's own edges is unambiguous.
+ * In the tray and on the dragged domino the half is a fixed box, so the
+ * percentages resolve there and this is not needed.
+ */
+.pip-cell > .pip-face {
+  position: absolute;
+  inset: 19%;
+  width: auto;
+  height: auto;
+}
 
 .pip-tray { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
 
@@ -966,9 +1020,60 @@ label.field > span { font-size: 0.82rem; font-weight: 600; color: var(--ink-soft
   background: var(--surface-sunk);
   border-radius: 3px;
 }
-.pip-domino.held { border-color: var(--game); box-shadow: 0 0 0 3px var(--game-wash); }
+.pip-domino {
+  cursor: grab;
+  /* A drag must not be stolen by the page scrolling under the finger. */
+  touch-action: none;
+  transition: transform var(--fast) var(--spring), border-color var(--fast) var(--ease),
+              box-shadow var(--fast) var(--ease);
+}
+.pip-domino:active { cursor: grabbing; }
+.pip-domino.held {
+  border-color: var(--game);
+  box-shadow: 0 0 0 3px var(--game-wash);
+  transform: translateY(-2px);
+}
+/* Turned on its end. The halves stack, and the order they are drawn in
+   already says which way round it is. */
+.pip-domino.upright { flex-direction: column; }
 .pip-domino.down { opacity: 0.4; }
 .pip-domino.down .pip-half { background: transparent; }
+
+/*
+ * The domino that follows your finger.
+ *
+ * Fixed to the viewport rather than placed in the page, so it is not clipped
+ * by the tray it came out of, and pinned so the first half sits under the
+ * pointer - that half is the one that lands on the square you are pointing at.
+ */
+.pip-ghost {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 2px solid var(--game);
+  border-radius: 6px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-lift);
+  pointer-events: none;
+  opacity: 0.92;
+}
+.pip-ghost[hidden] { display: none; }
+.pip-ghost .pip-half {
+  width: var(--pip, 40px);
+  height: var(--pip, 40px);
+  display: grid;
+  place-items: center;
+  background: var(--surface-sunk);
+  border-radius: 3px;
+}
+
+/* Pin the first half under the pointer, whichever way it is pointing. */
+.pip-ghost[data-turn="0"] { transform: translate(calc(var(--pip) / -2), calc(var(--pip) / -2)); }
+.pip-ghost[data-turn="1"] { flex-direction: column; transform: translate(calc(var(--pip) / -2), calc(var(--pip) / -2)); }
+.pip-ghost[data-turn="2"] { flex-direction: row-reverse; transform: translate(calc(var(--pip) / -2 - var(--pip) - 6px), calc(var(--pip) / -2)); }
+.pip-ghost[data-turn="3"] { flex-direction: column-reverse; transform: translate(calc(var(--pip) / -2), calc(var(--pip) / -2 - var(--pip) - 6px)); }
 
 /* ---------------------------------------------------------- stats page */
 

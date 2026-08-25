@@ -269,6 +269,9 @@ export async function render({ game, mode, code }) {
     const answer = await api.play(run.game, {
       mode: options.mode || run.mode,
       difficulty: options.difficulty || run.difficulty,
+      /* Asking outright for another one. A reload does not, which is what
+       * lets an unfinished unlimited round survive being refreshed. */
+      fresh: true,
     });
     run = answer.run;
 
