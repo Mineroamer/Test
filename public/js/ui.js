@@ -91,6 +91,8 @@ const ICONS = {
   travle: '<path d="M4 18l5-9 5 5 6-8"/><circle cx="4" cy="18" r="2.2" fill="currentColor" stroke="none"/><circle cx="20" cy="6" r="2.2" fill="currentColor" stroke="none"/>',
   crossword: '<rect x="3" y="3" width="18" height="18" rx="1.5"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/><rect x="9" y="9" width="6" height="6" fill="currentColor" stroke="none" opacity=".35"/>',
   mini: '<rect x="4" y="4" width="16" height="16" rx="1.5"/><path d="M12 4v16M4 12h16"/><rect x="4" y="4" width="8" height="8" fill="currentColor" stroke="none" opacity=".35"/>',
+  strands: '<circle cx="6" cy="6" r="1.8" fill="currentColor" stroke="none"/><circle cx="12" cy="9" r="1.8" fill="currentColor" stroke="none"/><circle cx="18" cy="6" r="1.8" fill="currentColor" stroke="none"/><circle cx="7" cy="15" r="1.8" fill="currentColor" stroke="none"/><circle cx="14" cy="18" r="1.8" fill="currentColor" stroke="none"/><path d="M6 6l6 3 6-3M7 15l7 3"/>',
+  pips: '<rect x="3" y="7" width="18" height="10" rx="2"/><path d="M12 7v10"/><circle cx="7.5" cy="10.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="7.5" cy="13.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="16.5" cy="12" r="1.1" fill="currentColor" stroke="none"/>',
   friends: '<circle cx="9" cy="8" r="3.4"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M16 5.5a3.4 3.4 0 0 1 0 6.6M17.5 19a5.5 5.5 0 0 0-2-4.2"/>',
   stats: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
   build: '<path d="M4 20l4-1 9.5-9.5a2.1 2.1 0 0 0-3-3L5 16z"/><path d="M14.5 5.5l4 4"/>',

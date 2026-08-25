@@ -81,7 +81,8 @@ async function main() {
     assert.equal(typeof body.day, "number");
     /* Named rather than counted, so adding a game does not fail this. */
     const offered = body.catalogue.map((entry) => entry.key).sort();
-    assert.deepEqual(offered, ["bee", "boxed", "connections", "crossword", "mini", "travle", "wordle"]);
+    assert.deepEqual(offered,
+      ["bee", "boxed", "connections", "crossword", "mini", "pips", "strands", "travle", "wordle"]);
   });
 
   await test("signup rejects a short password", async () => {
@@ -423,6 +424,130 @@ async function main() {
     assert.equal(given.run.puzzle.status, "done");
     assert.equal(given.run.puzzle.solution, real.letters.toUpperCase());
     assert.equal(given.run.summary.won, false, "giving up is not a win");
+  });
+
+  await test("strands deals a themed board using every square", async () => {
+    const { body } = await alice("POST", "/api/play/strands", { mode: "unlimited" });
+    const puzzle = body.run.puzzle;
+
+    assert.equal(puzzle.letters.length, puzzle.rows * puzzle.cols);
+    assert.ok(puzzle.theme && puzzle.theme.length > 3);
+    assert.equal(puzzle.answers, null, "the words must not ship with the board");
+
+    const real = answerTo(body.run.id);
+    const covered = new Array(puzzle.letters.length).fill(0);
+    for (const entry of real.entries) for (const cell of entry.cells) covered[cell] += 1;
+    assert.ok(covered.every((n) => n === 1), "every square belongs to exactly one word");
+    assert.equal(real.entries.filter((e) => e.spangram).length, 1, "exactly one spangram");
+    assert.equal(JSON.stringify(puzzle).includes(real.entries[1].word), false, "a word leaked");
+  });
+
+  await test("strands accepts a traced word and refuses a broken path", async () => {
+    const { body } = await alice("POST", "/api/play/strands", { mode: "unlimited" });
+    const real = answerTo(body.run.id);
+    const entry = real.entries[1];
+
+    const broken = await alice("POST", `/api/runs/${body.run.id}/guess`, { value: [0, 1, 2, 47] });
+    assert.equal(broken.body.result.ok, false);
+
+    const traced = await alice("POST", `/api/runs/${body.run.id}/guess`, { value: entry.cells });
+    assert.equal(traced.body.result.ok, true);
+    assert.equal(traced.body.result.theme, true);
+    assert.equal(traced.body.run.puzzle.found.length, 1);
+
+    const again = await alice("POST", `/api/runs/${body.run.id}/guess`, { value: entry.cells });
+    assert.equal(again.body.result.ok, false, "the same word twice is refused");
+  });
+
+  await test("strands hints have to be earned", async () => {
+    const { body } = await alice("POST", "/api/play/strands", { mode: "unlimited" });
+    const { body: early } = await alice("POST", `/api/runs/${body.run.id}/hint`, {});
+    assert.equal(early.result.ok, false);
+    assert.match(early.result.message, /earn a hint/);
+  });
+
+  await test("pips deals a board with exactly one answer", async () => {
+    const { body } = await alice("POST", "/api/play/pips", { mode: "unlimited" });
+    const puzzle = body.run.puzzle;
+
+    assert.ok(puzzle.dominoes.length >= 5);
+    assert.equal(puzzle.cells.length, puzzle.dominoes.length * 2, "the dominoes cover the board exactly");
+    assert.equal(puzzle.solution, null, "the answer must not ship with the board");
+
+    /* Confirm the claim the generator makes about itself. */
+    const real = answerTo(body.run.id);
+    const { countSolutions } = require("../src/server/pips.js");
+    assert.equal(countSolutions(real, 3), 1, "a dealt puzzle must have one answer");
+  });
+
+  await test("pips refuses illegal placements", async () => {
+    const { body } = await alice("POST", "/api/play/pips", { mode: "unlimited" });
+    const id = body.run.id;
+
+    for (const [why, move] of [
+      ["a domino that does not exist", { domino: 99, cells: [[0, 0], [0, 1]] }],
+      ["squares that do not touch", { domino: 0, cells: [[0, 0], [5, 5]] }],
+      ["one square twice", { domino: 0, cells: [[0, 0], [0, 0]] }],
+      ["off the board", { domino: 0, cells: [[80, 80], [80, 81]] }],
+    ]) {
+      const { body: tried } = await alice("POST", `/api/runs/${id}/guess`, { value: move });
+      assert.equal(tried.result.ok, false, why + " should be refused");
+    }
+  });
+
+  await test("pips can be solved, and a lifted domino frees its squares", async () => {
+    const { body } = await alice("POST", "/api/play/pips", { mode: "unlimited" });
+    const id = body.run.id;
+    const real = answerTo(body.run.id);
+    const answer = new Map(real.solution);
+
+    /* Work out where each domino belongs, then place them all. */
+    const placedCells = new Set();
+    const moves = [];
+    for (let index = 0; index < real.dominoes.length; index++) {
+      const [a, b] = real.dominoes[index];
+      let done = false;
+      for (const cell of real.cells) {
+        if (done) break;
+        const key = `${cell[0]},${cell[1]}`;
+        if (placedCells.has(key)) continue;
+        for (const [dr, dc] of [[0, 1], [1, 0]]) {
+          const other = `${cell[0] + dr},${cell[1] + dc}`;
+          if (!answer.has(other) || placedCells.has(other)) continue;
+          const wants = [answer.get(key), answer.get(other)];
+          if (!((wants[0] === a && wants[1] === b) || (wants[0] === b && wants[1] === a))) continue;
+          moves.push({ domino: index, cells: [cell, [cell[0] + dr, cell[1] + dc]], flip: wants[0] !== a });
+          placedCells.add(key);
+          placedCells.add(other);
+          done = true;
+          break;
+        }
+      }
+    }
+    assert.equal(moves.length, real.dominoes.length, "every domino should have a home");
+
+    let last = null;
+    for (const move of moves) {
+      last = (await alice("POST", `/api/runs/${id}/guess`, { value: move })).body;
+      assert.equal(last.result.ok, true, "placing should be allowed: " + (last.result.message || ""));
+    }
+    assert.equal(last.run.puzzle.status, "won");
+
+    /* And a domino can be taken back off a board still in play. */
+    const other = await alice("POST", "/api/play/pips", { mode: "unlimited" });
+    const first = other.body.run.puzzle.cells[0].split(",").map(Number);
+    const beside = other.body.run.puzzle.cells.find((key) => {
+      const [r, c] = key.split(",").map(Number);
+      return Math.abs(r - first[0]) + Math.abs(c - first[1]) === 1;
+    });
+    if (beside) {
+      const down = await alice("POST", `/api/runs/${other.body.run.id}/guess`,
+        { value: { domino: 0, cells: [first, beside.split(",").map(Number)] } });
+      assert.equal(down.body.result.ok, true);
+      const up = await alice("POST", `/api/runs/${other.body.run.id}/guess`, { value: { domino: 0, lift: true } });
+      assert.equal(up.body.result.ok, true);
+      assert.equal(up.body.run.puzzle.placed.length, 0);
+    }
   });
 
   await test("one player cannot open another's round", async () => {

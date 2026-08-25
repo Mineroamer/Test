@@ -15,8 +15,10 @@ const bee = require("./spellingbee.js");
 const boxed = require("./letterboxed.js");
 const travle = require("./travle.js");
 const { crossword, mini } = require("./crossword.js");
+const strands = require("./strands.js");
+const pips = require("./pips.js");
 
-const LIST = [wordle, connections, bee, boxed, crossword, mini, travle];
+const LIST = [wordle, connections, bee, boxed, crossword, mini, strands, pips, travle];
 const GAMES = Object.fromEntries(LIST.map((g) => [g.key, g]));
 
 /* What the home screen shows about each game, kept here so the browser does
@@ -68,6 +70,22 @@ const CATALOGUE = [
     tagline: "Five by five.",
     blurb: "The same idea, small enough for a bus stop.",
     icon: "mini",
+    custom: false,
+  },
+  {
+    key: "strands",
+    name: "Strands",
+    tagline: "Every letter belongs to something.",
+    blurb: "Find the themed words hidden in the grid. One of them names the theme and crosses the whole board.",
+    icon: "strands",
+    custom: false,
+  },
+  {
+    key: "pips",
+    name: "Pips",
+    tagline: "Dominoes, with rules.",
+    blurb: "Cover the board so every marked region adds up, matches or differs the way it says it must.",
+    icon: "pips",
     custom: false,
   },
   {

@@ -57,6 +57,8 @@
   --game-boxed: #17679e;
   --game-crossword: #ab4a2c;
   --game-mini: #a83e6e;
+  --game-strands: #2f6f3f;
+  --game-pips: #7a5bb5;
   --game-travle: #0b6e75;
   --game: var(--accent);
   --game-wash: var(--accent-wash);
@@ -116,6 +118,8 @@
     --game-boxed: #5fb0e4;
     --game-crossword: #e0846a;
     --game-mini: #e07aa8;
+    --game-strands: #6fc98a;
+    --game-pips: #b49ae8;
     --game-travle: #45c2b9;
 
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.45), 0 8px 26px -16px rgba(0, 0, 0, 0.95);
@@ -154,6 +158,8 @@
   --game-boxed: #5fb0e4;
   --game-crossword: #e0846a;
   --game-mini: #e07aa8;
+  --game-strands: #6fc98a;
+  --game-pips: #b49ae8;
   --game-travle: #45c2b9;
 
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.45), 0 8px 26px -16px rgba(0, 0, 0, 0.95);
@@ -402,6 +408,8 @@ label.field > span { font-size: 0.82rem; font-weight: 600; color: var(--ink-soft
 .game[data-game="boxed"] { --game: var(--game-boxed); }
 .game[data-game="crossword"] { --game: var(--game-crossword); }
 .game[data-game="mini"] { --game: var(--game-mini); }
+.game[data-game="strands"] { --game: var(--game-strands); }
+.game[data-game="pips"] { --game: var(--game-pips); }
 .game[data-game="travle"] { --game: var(--game-travle); }
 .game { --game-wash: color-mix(in srgb, var(--game) 16%, var(--surface)); }
 
@@ -773,6 +781,144 @@ label.field > span { font-size: 0.82rem; font-weight: 600; color: var(--ink-soft
   padding: 0;
   min-height: 0;
 }
+
+/* -------------------------------------------------------------- strands */
+
+.st-wrap { position: relative; width: 100%; max-width: 340px; margin: 0 auto; }
+
+.st-board {
+  display: grid;
+  grid-template-columns: repeat(var(--cols), 1fr);
+  gap: 2px;
+  position: relative;
+  z-index: 1;
+  touch-action: none;         /* a trace is a drag, not a scroll */
+}
+
+.st-cell {
+  aspect-ratio: 1;
+  min-height: 0;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink);
+  font-weight: 700;
+  font-size: clamp(0.85rem, 4vw, 1.15rem);
+  text-transform: uppercase;
+  display: grid;
+  place-items: center;
+  transition: background var(--fast) var(--ease-soft), color var(--fast) var(--ease-soft);
+}
+.st-cell:hover:not(:disabled) { background: var(--surface-sunk); }
+.st-cell.tracing { background: var(--ink); color: var(--surface); }
+.st-cell.found { background: var(--game-wash); color: var(--game); }
+.st-cell.spangram { background: var(--game); color: var(--accent-ink); }
+/* Lit by a hint: outlined rather than filled, since the word is still hidden. */
+.st-cell.lit { box-shadow: inset 0 0 0 2px var(--near); }
+
+/* The joining lines sit under the letters. */
+.st-lines { position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: visible; }
+.st-line { fill: none; stroke-width: 8; stroke-linecap: round; stroke-linejoin: round; }
+.st-line.tracing { stroke: var(--ink); opacity: 0.35; }
+.st-line.found { stroke: var(--game); opacity: 0.3; }
+.st-line.spangram { stroke: var(--game); opacity: 0.55; stroke-width: 10; }
+
+.st-board.shake { animation: shake 0.42s var(--ease-soft); }
+
+/* ----------------------------------------------------------------- pips */
+
+.pip-board {
+  display: grid;
+  grid-template-columns: repeat(var(--cols), 1fr);
+  gap: 3px;
+  width: 100%;
+  max-width: min(100%, 360px);
+  margin: 0 auto;
+}
+
+.pip-gap { aspect-ratio: 1; }
+
+.pip-cell {
+  position: relative;
+  aspect-ratio: 1;
+  min-height: 0;
+  padding: 0;
+  border: 2px solid var(--rule-firm);
+  border-radius: 5px;
+  background: var(--surface-raised);
+  display: grid;
+  place-items: center;
+  transition: border-color var(--fast) var(--ease-soft), background var(--fast) var(--ease-soft);
+}
+/*
+ * Which squares belong together is the whole puzzle, so the regions are tinted
+ * firmly rather than tastefully - at eight percent they were invisible, and a
+ * board whose regions cannot be seen is not a board. Six tints cycle so two
+ * touching regions almost never share one.
+ */
+.pip-cell[data-region="0"] { background: color-mix(in srgb, var(--game) 26%, var(--surface-raised)); }
+.pip-cell[data-region="1"] { background: color-mix(in srgb, var(--ok) 24%, var(--surface-raised)); }
+.pip-cell[data-region="2"] { background: color-mix(in srgb, var(--near) 30%, var(--surface-raised)); }
+.pip-cell[data-region="3"] { background: color-mix(in srgb, var(--accent) 24%, var(--surface-raised)); }
+.pip-cell[data-region="4"] { background: color-mix(in srgb, var(--off) 22%, var(--surface-raised)); }
+.pip-cell[data-region="5"] { background: color-mix(in srgb, var(--ink) 14%, var(--surface-raised)); }
+
+/* A domino on top reads as an object laid over the region, not as part of it. */
+.pip-cell.filled {
+  border-color: var(--ink);
+  background: var(--surface-raised);
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+.pip-cell.anchor { border-color: var(--game); box-shadow: 0 0 0 3px var(--game-wash); }
+.pip-cell.broken { border-color: var(--off); }
+.pip-cell.given { border-style: dashed; }
+
+.pip-rule {
+  position: absolute;
+  top: 2px;
+  left: 4px;
+  font-family: var(--mono);
+  font-size: clamp(0.55rem, 2.2vw, 0.7rem);
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1;
+  pointer-events: none;
+}
+
+/* A domino face: three by three, with the dots that are lit shown. */
+.pip-face {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  width: 66%;
+  aspect-ratio: 1;
+}
+.pip-face i { border-radius: 50%; background: transparent; }
+.pip-face i.on { background: var(--ink); }
+
+.pip-tray { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+
+.pip-domino {
+  display: flex;
+  gap: 2px;
+  padding: 5px;
+  min-height: 0;
+  border: 2px solid var(--rule-firm);
+  border-radius: 6px;
+  background: var(--surface-raised);
+}
+.pip-domino .pip-half {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  background: var(--surface-sunk);
+  border-radius: 3px;
+}
+.pip-domino.held { border-color: var(--game); box-shadow: 0 0 0 3px var(--game-wash); }
+.pip-domino.down { opacity: 0.4; }
+.pip-domino.down .pip-half { background: transparent; }
 
 /* ---------------------------------------------------------- stats page */
 

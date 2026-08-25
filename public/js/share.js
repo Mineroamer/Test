@@ -50,6 +50,18 @@ function scoreLine(run) {
       return `${s.won ? `Solved in ${s.guesses}` : "Not solved"}${hints}`;
     case "travle":
       return `${s.won ? `${s.guesses} moves, par ${s.par}` : "Did not arrive"}${hints}`;
+    case "strands": {
+      const found = `${s.guesses}/${s.total} words`;
+      const own = s.extras ? `${s.extras} of your own` : null;
+      return [found, own, hints.replace(/^ · /, "")].filter(Boolean).join(" · ");
+    }
+    case "pips": {
+      const took = run.finishedAt != null && run.startedAt != null
+        ? clock(run.finishedAt - run.startedAt)
+        : null;
+      return [s.won ? took || "Solved" : "Not solved", `${s.dominoes} dominoes`,
+        hints.replace(/^ · /, "")].filter(Boolean).join(" · ");
+    }
     case "crossword":
     case "mini": {
       /* A crossword is shared on its time, the way crossword solvers compare
@@ -120,6 +132,16 @@ function grid(run) {
     /* The full crossword is shared on its time alone: two hundred and
      * twenty-five squares is a wall of emoji nobody wants pasted at them. */
     case "crossword":
+      return [];
+
+    case "strands": {
+      /* The words in the order they were found, with the spangram picked out -
+       * which says how the puzzle unravelled without naming a single word. */
+      const marks = s.grid.map((kind) => (kind === "spangram" ? "\u{1F7E1}" : "\u{1F535}"));
+      return chunk(marks.join(""), 8);
+    }
+
+    case "pips":
       return [];
 
     default:

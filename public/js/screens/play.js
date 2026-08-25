@@ -25,6 +25,8 @@ const VIEWS = {
   /* One view serves both crosswords; only the grid size differs. */
   crossword: () => import("../games/crossword.js"),
   mini: () => import("../games/crossword.js"),
+  strands: () => import("../games/strands.js"),
+  pips: () => import("../games/pips.js"),
 };
 
 export async function render({ game, mode, code }) {
@@ -143,7 +145,7 @@ export async function render({ game, mode, code }) {
   }
 
   function canGiveUp() {
-    return ["bee", "boxed", "travle", "crossword", "mini"].includes(run.game);
+    return ["bee", "boxed", "travle", "crossword", "mini", "strands", "pips"].includes(run.game);
   }
 
   function confirmGiveUp() {
@@ -189,6 +191,8 @@ export async function render({ game, mode, code }) {
 
   function verdict(r, won) {
     if (r.game === "bee") return `${r.puzzle.rank.name} · ${r.puzzle.score} points`;
+    if (r.game === "strands") return won ? "Every word found" : `${r.summary.guesses} of ${r.summary.total}`;
+    if (r.game === "pips") return won ? "Board covered" : "Not covered";
     if (won) {
       if (r.game === "travle") {
         const over = r.summary.over;
@@ -200,10 +204,12 @@ export async function render({ game, mode, code }) {
   }
 
   function guessNoun(key) {
-    return { connections: "attempt", bee: "word", boxed: "word", travle: "move", crossword: "letter", mini: "letter" }[key] || "guess";
+    return { connections: "attempt", bee: "word", boxed: "word", travle: "move",
+      crossword: "letter", mini: "letter", strands: "word", pips: "domino" }[key] || "guess";
   }
   function guessPlural(key) {
-    return { connections: "attempts", bee: "words", boxed: "words", travle: "moves", crossword: "letters", mini: "letters" }[key] || "guesses";
+    return { connections: "attempts", bee: "words", boxed: "words", travle: "moves",
+      crossword: "letters", mini: "letters", strands: "words", pips: "dominoes" }[key] || "guesses";
   }
 
   async function again() {

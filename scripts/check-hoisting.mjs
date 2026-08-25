@@ -17,6 +17,13 @@
  * it is reported. That transitive step is the point - the two real bugs were
  * both a helper called by paint(), not by the factory directly.
  *
+ * It is deliberately conservative. It cannot tell a call that happens during
+ * setup from one inside an event handler that setup merely registers, and it
+ * reports both. That is the right trade: the fix either way is to write the
+ * helper as a function declaration, which costs nothing and removes the
+ * question - and a checker that only fired on certainties would need to be a
+ * real parser to be worth having.
+ *
  * Run with `npm run check`.
  */
 

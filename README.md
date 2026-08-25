@@ -44,6 +44,8 @@ needs no sign-up, and cannot rot.
 | **Letter Boxed** — twelve letters, four sides | ✓ | ✓ | |
 | **The Crossword** — a full 15×15 | ✓ | ✓ | |
 | **The Mini** — 5×5 | ✓ | ✓ | |
+| **Strands** — themed words hidden in a grid | ✓ | ✓ | |
+| **Pips** — dominoes under region rules | ✓ | ✓ | |
 | **Travle Overland** — walk between two countries | ✓ | ✓ | ✓ |
 
 Travle Overland came first, as a standalone game. Its engine and its map are
@@ -81,6 +83,7 @@ tiers feed which game is the main lever on how fair each game feels:
 | `boxed-words.json` | Common words of 3+ letters | 42,441 |
 | `crossword-clues.json` | Answers with a clue, from WordNet definitions | 41,313 |
 | `connections-groups.js` | Hand-written categories, four difficulty tiers | 124 |
+| `strands-themes.js` | Hand-written themes with a spangram each | 16 |
 
 Connections categories are hand-written, because a category is a judgement
 call rather than something a word list can produce. Four groups are dealt, one
@@ -113,6 +116,33 @@ sixty-three carry on working, which meant a 2-second budget could run for 32
 seconds. And rather than one black-square density there is a ladder: an open
 grid makes the better puzzle so it is tried first, and each rung up adds black
 squares and makes the fill easier. A 15×15 lands in about a second.
+
+### Strands
+
+Six squares across and eight down, so the theme words must use exactly
+forty-eight letters between them — no more, none left over. That is why each
+theme carries far more words than a puzzle needs: the dealer picks whichever
+subset adds up, and a thin pool would often have no subset that does.
+
+Laying them out is exact cover by paths, and the thing that makes it tractable
+is always working on the square with the fewest free neighbours. A corner about
+to be stranded gets dealt with while something can still reach it, instead of
+being discovered as an unfillable hole at the very end.
+
+### Pips
+
+The generator works backwards from an answer, which is the only sane way to
+guarantee there is one: lay the dominoes out, then describe what happened as
+rules. A solver then confirms the puzzle has **exactly one** solution — and
+where it does not, the loosest region is tightened to a sum until it does.
+
+Two things came out of measuring rather than guessing. The board is grown *out*
+of dominoes rather than drawn and then tiled, because a domino always covers
+one square of each colour on a checkerboard, so better than half of the shapes
+drawn the other way had no tiling at all. And the rules are weighted toward the
+tight ones — a sum pins a region down, "less than" barely narrows it — because
+offering them evenly produced boards with dozens of answers that then had to be
+tightened one region at a time.
 
 ## The server is the referee
 
@@ -194,10 +224,11 @@ the home screen is the real time until that happens.
 npm test
 ```
 
-59 end-to-end tests against the real HTTP server: sessions, resuming a round,
+65 end-to-end tests against the real HTTP server: sessions, resuming a round,
 whether an answer leaks before it should, whether a finished round can be
 counted twice, whether two people racing for one username can both have it,
-and each game played to a win.
+and each game played to a win — including confirming that a dealt Pips board
+really does have the single answer its generator claims.
 
 `npm run check` runs first and catches one specific mistake this codebase kept
 making. The view modules set everything up, call `paint()`, return their

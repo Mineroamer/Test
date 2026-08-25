@@ -46,6 +46,7 @@ PC.data = {
   beePuzzles: ${JSON.stringify(bee)},
   boxedWords: ${read("data", "boxed-words.json")},
   crosswordClues: ${read("data", "crossword-clues.json")},
+  strandsThemes: ${read("data", "strands-themes.js").replace(/^[\s\S]*?module\.exports\s*=\s*/, "").replace(/;\s*$/, "")},
   connectionsGroups: ${groups}
 };`;
 }
@@ -100,6 +101,14 @@ function buildEngines() {
       ['require(path.join(__dirname, "..", "..", "..", "data", "boxed-words.json"))', "PC.data.boxedWords"],
     ]),
     travle: commonjsToExpression(read("src", "server", "games", "travle.js"), []),
+    strands: commonjsToExpression(read("src", "server", "games", "strands.js"), [
+      ['require(path.join(__dirname, "..", "..", "..", "data", "strands-themes.js"))', "PC.data.strandsThemes"],
+      ['require(path.join(__dirname, "..", "..", "..", "data", "boxed-words.json"))', "PC.data.boxedWords"],
+      ['require("../strands.js")', "PC.strandsBuilder"],
+    ]),
+    pips: commonjsToExpression(read("src", "server", "games", "pips.js"), [
+      ['require("../pips.js")', "PC.pipsBuilder"],
+    ]),
   };
 
   /*
@@ -114,6 +123,16 @@ function buildEngines() {
       'const CLUES = require(path.join(__dirname, "..", "..", "data", "crossword-clues.json"));',
       "const CLUES = PC.data.crosswordClues;"
     )
+    .replace(/module\.exports = /, "return ");
+
+  const strandsBuilder = read("src", "server", "strands.js")
+    .replace(/^"use strict";\n/, "")
+    .replace(/^const \{([^}]*)\} = require\("\.\/rng\.js"\);\n/m, "const {$1} = PC.rng;\n")
+    .replace(/module\.exports = /, "return ");
+
+  const pipsBuilder = read("src", "server", "pips.js")
+    .replace(/^"use strict";\n/, "")
+    .replace(/^const \{([^}]*)\} = require\("\.\/rng\.js"\);\n/m, "const {$1} = PC.rng;\n")
     .replace(/module\.exports = /, "return ");
 
   const crosswords = read("src", "server", "games", "crossword.js")
@@ -137,6 +156,12 @@ function buildEngines() {
 PC.catalogue = ${catalogue};
 PC.crosswordBuilder = (function () {
 ${builder}
+})();
+PC.strandsBuilder = (function () {
+${strandsBuilder}
+})();
+PC.pipsBuilder = (function () {
+${pipsBuilder}
 })();
 PC.crosswords = (function () {
 ${crosswords}
@@ -214,6 +239,8 @@ const KEY_FOR = {
   "../games/boxed.js": "games/boxed",
   "../games/travle.js": "games/travle",
   "../games/crossword.js": "games/crossword",
+  "../games/strands.js": "games/strands",
+  "../games/pips.js": "games/pips",
 };
 
 function resolve(from) {
@@ -237,6 +264,8 @@ const ORDER = [
   ["games/boxed", ["public", "js", "games", "boxed.js"]],
   ["games/travle", ["public", "js", "games", "travle.js"]],
   ["games/crossword", ["public", "js", "games", "crossword.js"]],
+  ["games/strands", ["public", "js", "games", "strands.js"]],
+  ["games/pips", ["public", "js", "games", "pips.js"]],
   ["screens/home", ["public", "js", "screens", "home.js"]],
   ["screens/auth", ["public", "js", "screens", "auth.js"]],
   ["screens/stats", ["public", "js", "screens", "stats.js"]],
