@@ -21,8 +21,7 @@ friends, standings, and a server that keeps the answers to itself.
 npm run build:page    # writes dist/puzzle-club.html
 ```
 
-One HTML file, about 1.5 MB, that runs the same five games with no server
-behind it. Open it off disk, put it on any static host, email it to someone.
+One HTML file that runs all nine games with no server behind it. Open it off disk, put it on any static host, email it to someone.
 
 What it trades away is what a server was doing: there are no accounts, so
 there are no friends and no shared standings, and your record lives in that
@@ -48,9 +47,19 @@ needs no sign-up, and cannot rot.
 | **Pips** — dominoes under region rules | ✓ | ✓ | |
 | **Travle Overland** — walk between two countries | ✓ | ✓ | ✓ |
 
-Travle Overland came first, as a standalone game. Its engine and its map are
-here unchanged; what is new is that the server now judges the round, so a walk
-can be picked up on another device and can count towards a streak.
+Travle Overland came first, as a standalone game. Its engine, its map and its
+interface are here as they were; what is new is that the server now judges the
+round, so a walk can be picked up on another device and can count towards a
+streak — one per difficulty, since the three daily levels are three different
+walks rather than one walk at three settings.
+
+Two house rules join the board up. The Bering Strait counts as a border between
+Russia and the United States, which is the only way the Americas reach the rest
+of the world. And because land borders alone leave every island nation with
+nowhere to walk, forty-five named sea crossings — Gibraltar, the Channel, Torres
+Strait, the Palk Strait, the Windward Passage and the rest — put them back on
+the board. Every one of the 197 countries can now be reached, the crossing is
+named on your trail as you take it, and the map draws it as a dashed line.
 
 The Spelling Bee and Letter Boxed have no puzzle builder. Their puzzles are
 only fair because a solver checked them first, and a hand-written one would
@@ -82,13 +91,18 @@ tiers feed which game is the main lever on how fair each game feels:
 | `bee-puzzles.json` | Letter sets, each with a pangram and 20–90 words | 33,385 |
 | `boxed-words.json` | Common words of 3+ letters | 42,441 |
 | `crossword-clues.json` | Answers with a clue, from WordNet definitions | 41,313 |
-| `connections-groups.js` | Hand-written categories, four difficulty tiers | 124 |
+| `connections-boards.js` | Hand-built whole boards, four tiers and a trap each | 36 |
 | `strands-themes.js` | Hand-written themes with a spangram each | 16 |
 
-Connections categories are hand-written, because a category is a judgement
-call rather than something a word list can produce. Four groups are dealt, one
-per difficulty tier, and any candidate sharing a word with a group already
-chosen is passed over — so a puzzle always has exactly one right answer.
+Connections is written a whole board at a time, not four categories dealt
+together. That is the difference between the puzzle and a quiz. A real one is
+built around a trap: SOLE and HEEL sit on a board with LACE, EYELET and INSTEP,
+and both of them look like parts of a shoe. Neither is — one is a flat fish and
+the other is an unpleasant person. Dealing four independent categories can never
+produce that, because the dealer's whole job is to make sure they *don't*
+overlap. So each of the 36 boards is built with its trap first and the four
+groups written around it; the deal only shuffles the sixteen words and walks the
+library one board per day.
 
 Every Letter Boxed puzzle is built around a solution rather than scattered and
 hoped over: two words that chain and between them use exactly twelve distinct
@@ -193,7 +207,8 @@ src/server/
 data/                  generated word lists, and the store — never served
 public/                the browser app: no build step, no framework
   js/games/travle/     the original game's engine and map, used by both sides
-tests/run.js           52 tests over the real HTTP server
+tests/run.js           69 tests over the real HTTP server
+tests/play.js          14 tests that play every game through to a finish
 scripts/build-data.mjs regenerates data/ from the source word lists
 scripts/build-artifact.mjs packs everything into one static HTML file
 scripts/check-hoisting.mjs catches helpers used before they exist
@@ -224,11 +239,20 @@ the home screen is the real time until that happens.
 npm test
 ```
 
-65 end-to-end tests against the real HTTP server: sessions, resuming a round,
-whether an answer leaks before it should, whether a finished round can be
-counted twice, whether two people racing for one username can both have it,
-and each game played to a win — including confirming that a dealt Pips board
-really does have the single answer its generator claims.
+83 tests, in two suites, both against the real HTTP server.
+
+`tests/run.js` is 69 tests on the machinery: sessions, resuming a round, whether
+an answer leaks before it should, whether a finished round can be counted twice,
+whether two people racing for one username can both have it, whether the store
+is reachable over HTTP (it is not, and it holds password hashes), and whether a
+dealt Pips board really does have the single answer its generator claims.
+
+`tests/play.js` — also `npm run play` — is 14 tests that sit down and play. Every
+one of the nine games is driven to a finish over HTTP the way a person would
+play it: guessed, solved, traced, walked. Wordle is won and also lost; Connections
+is solved and also failed on four mistakes; Travle walks a shortest route and
+then reaches an island by sea. It is the suite that catches a game that is
+technically correct and unplayable.
 
 `npm run check` runs first and catches one specific mistake this codebase kept
 making. The view modules set everything up, call `paint()`, return their

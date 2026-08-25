@@ -10,10 +10,11 @@
   },
   "scripts": {
     "start": "node server.js",
-    "test": "node scripts/check-hoisting.mjs && node tests/run.js",
+    "test": "node scripts/check-hoisting.mjs && node tests/run.js && node tests/play.js",
     "build:data": "node scripts/build-data.mjs",
     "build:page": "node scripts/build-artifact.mjs",
-    "check": "node scripts/check-hoisting.mjs"
+    "check": "node scripts/check-hoisting.mjs",
+    "play": "node tests/play.js"
   },
   "devDependencies": {
     "word-list": "^4.0.0",

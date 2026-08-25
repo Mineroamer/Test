@@ -73,7 +73,7 @@ export function create(ctx) {
       h("li", { dataset: { key: "here" } }, "You are here"),
       h("li", { dataset: { key: "trail" } }, "Countries crossed"),
       h("li", { dataset: { key: "finish" } }, "Finish"),
-      h("li", { dataset: { key: "bering" } }, "Bering crossing"),
+      h("li", { dataset: { key: "bering" } }, "Crossing by sea"),
       h("li.legend-hint", {}, "Drag to move · scroll to zoom")));
 
   el.difficulty = h("div.difficulty", { role: "group", "aria-label": "Difficulty" });
@@ -278,7 +278,7 @@ export function create(ctx) {
   function renderTrail() {
     el.trail.textContent = "";
     game.trail.forEach((code, i) => {
-      /* Only the Bering hop gets a marker. A plain border needs none: the
+      /* Only a crossing by sea gets a marker. A plain border needs none: the
        * order of the chips already says you walked from one to the next. */
       const link = i > 0 ? E.linkBetween(game.trail[i - 1], code) : null;
       const hop = link ? link.label : null;

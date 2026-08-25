@@ -93,6 +93,14 @@
     this.marks.bering = beringRing;
     overlay.appendChild(this.bering);
 
+    /* Every other sea crossing is drawn on demand, once the player takes it:
+     * a dashed line between the two countries' centres, the same mark the
+     * Bering strait gets. The Bering line stays hand-placed above because
+     * Russia's centre is deep in Siberia and America's is in Kansas - a line
+     * between those two says nothing about the strait. */
+    this.crossings = make("g", { class: "crossings" });
+    overlay.appendChild(this.crossings);
+
     this.marks.start = make("g", { class: "mark mark-start" });
     this.marks.start.appendChild(make("circle", { class: "mark-ring", r: 9 }));
     this.marks.start.appendChild(make("circle", { class: "mark-core", r: 3.4 }));
@@ -140,9 +148,27 @@
     this.at.here = MAP.centres[game.current] || null;
     this.marks.here.classList.toggle("at-finish", game.current === game.end);
 
-    const usedJump = game.trail.some((code, i) =>
-      i > 0 && root.Engine.linkBetween(game.trail[i - 1], code));
-    this.bering.setAttribute("data-used", String(usedJump));
+    /* Which crossings this trail actually used. The Bering strait has its own
+     * marker; the rest get a line drawn between their centres. */
+    let usedBering = false;
+    this.crossings.textContent = "";
+    for (let i = 1; i < game.trail.length; i += 1) {
+      const from = game.trail[i - 1];
+      const to = game.trail[i];
+      if (!root.Engine.linkBetween(from, to)) continue;
+      if ((from === "RU" && to === "US") || (from === "US" && to === "RU")) {
+        usedBering = true;
+        continue;
+      }
+      const a = MAP.centres[from];
+      const b = MAP.centres[to];
+      if (!a || !b) continue;
+      this.crossings.appendChild(make("line", {
+        class: "crossing-line",
+        x1: a[0], y1: a[1], x2: b[0], y2: b[1],
+      }));
+    }
+    this.bering.setAttribute("data-used", String(usedBering));
 
     this.place();
   };

@@ -179,6 +179,16 @@
 .travle-game .bering[data-used="true"] .bering-line { stroke-width: 2.6; opacity: 1; }
 .travle-game .bering[data-used="true"] .bering-ring { opacity: 1; stroke-width: 1.6; animation: ping 2.4s ease-out infinite; transform-origin: center; }
 
+/* The other sea crossings. Unlike the Bering line these are only drawn once
+   the player has taken them, so they are always at full strength. */
+.travle-game .crossing-line {
+  stroke: var(--bering);
+  stroke-width: 2.6;
+  stroke-dasharray: 3 2.5;
+  vector-effect: non-scaling-stroke;
+  opacity: 1;
+}
+
 
 /* ===================================================================== *
  * Everything below is Travle Overland's own furniture, carried across
@@ -507,7 +517,7 @@
   text-decoration: line-through;
 }
 
-/* The only hop worth marking: the Bering crossing. A plain land border needs
+/* The only hops worth marking: the crossings by sea. A plain land border needs
    no marker, because the order of the chips already carries it. */
 .travle-game .trail .hop {
   font-style: normal;
