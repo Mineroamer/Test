@@ -175,8 +175,19 @@ function existingRun(store, ctx, match) {
   const found = Object.values(store.data.runs).filter(
     (run) => run.owner === owner && Object.entries(match).every(([k, v]) => run[k] === v)
   );
-  return found.sort((a, b) => b.startedAt - a.startedAt)[0] || null;
+  /*
+   * Newest first, and ties broken by the order they were made in.
+   *
+   * `startedAt` is a millisecond, and two rounds started inside the same one -
+   * hitting "Another" quickly, or any two calls in a row - tie. A tie left to
+   * the sort is resolved arbitrarily, so a reload could bring back the round
+   * before the one you are looking at.
+   */
+  return found.sort((a, b) => b.startedAt - a.startedAt || (b.seq || 0) - (a.seq || 0))[0] || null;
 }
+
+/* Which round was made first, when two share a millisecond. */
+let runSeq = 0;
 
 /* Runs are transient; keep the newest few hundred per owner and let the rest go. */
 const RUNS_KEPT = 60;
@@ -380,6 +391,7 @@ function buildApi(store) {
     return { run: runView(store, run) };
 
     function newRun(fields) {
+      runSeq += 1;
       const id = auth.newId("r");
       const puzzle = puzzleForRun(store, { ...fields, state: null });
       const record = {
@@ -387,6 +399,8 @@ function buildApi(store) {
         ...fields,
         state: game.create(puzzle),
         startedAt: Date.now(),
+        /* Breaks the tie when two rounds share a millisecond. */
+        seq: runSeq,
         finishedAt: null,
         recorded: false,
       };

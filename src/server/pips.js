@@ -193,7 +193,21 @@ function ruleFor(values, random) {
   if (allSame && values.length > 1) offer({ kind: RULES.EQUAL }, 4);
   if (allDifferent && values.length > 1) offer({ kind: RULES.DIFFER }, 3);
   if (total > 0) offer({ kind: RULES.LESS, n: total + 1 + Math.floor(random() * 2) }, 1);
-  offer({ kind: RULES.MORE, n: Math.max(0, total - 1 - Math.floor(random() * 2)) }, 1);
+
+  /*
+   * "More than" needs a threshold the region actually clears. Clamping a
+   * negative one up to zero produced "adds up to more than 0" for a region
+   * holding nothing but a zero - a rule its own answer breaks. The board was
+   * still solvable some other way, so the uniqueness check waved it through,
+   * and what broke instead was the answer kept for hints and giving up: on
+   * about one board in twenty-five, following the hints laid out a board that
+   * could never come good.
+   *
+   * The roll happens either way, so the sequence of random numbers - and with
+   * it every board anyone has ever been dealt - does not depend on the branch.
+   */
+  const above = Math.max(0, total - 1 - Math.floor(random() * 2));
+  if (total > above) offer({ kind: RULES.MORE, n: above }, 1);
   /* A region with no rule is a rest for the eye, and only ever a small one. */
   if (values.length === 1) offer({ kind: RULES.FREE }, 1);
 
@@ -377,6 +391,20 @@ function build(seed, { squares = 12, maxRegion = 3, tries = 60 } = {}) {
       cols: Math.max(...cells.map((c) => c[1])) + 1,
     };
 
+    /*
+     * The answer has to answer the rules.
+     *
+     * Every rule here is written to describe what the generator just laid
+     * down, so this should be free - and it is, now. It stays because the
+     * alternative to checking is discovering it the way it was discovered:
+     * one board in twenty-five where the hints walked a player into a
+     * position that could not be finished. A puzzle whose own answer is
+     * wrong is worse than no puzzle.
+     */
+    const answersItself = puzzle.regions.every((region) =>
+      holds(region.rule, region.cells.map((key) => value.get(key)), 0));
+    if (!answersItself) continue;
+
     /* Tighten until it is the only answer, or give up on this board. */
     /* A few passes, then move on. Trying another board is cheaper than
      * grinding on one that will not come good. */
@@ -401,7 +429,20 @@ function build(seed, { squares = 12, maxRegion = 3, tries = 60 } = {}) {
 }
 
 /** Build, retrying with a nudged seed, so a caller always gets a puzzle. */
-function buildStubbornly(seed, options, tries = 5) {
+/*
+ * Keep trying until a board comes out.
+ *
+ * One attempt lands about three times in four at the daily's size, so five
+ * tries left roughly one day in seven hundred and fifty with no puzzle at all
+ * - and a daily that cannot be dealt is not a bad puzzle, it is an error page
+ * for everybody, all day. Day 999 was one of them. Twelve tries puts that at
+ * about one day in six million, and a failed attempt is cheap: the whole
+ * ladder costs a few milliseconds.
+ *
+ * The retry seed is derived from the original, so which attempt succeeds is
+ * still settled by the seed alone and everyone gets the same board.
+ */
+function buildStubbornly(seed, options, tries = 12) {
   for (let i = 0; i < tries; i++) {
     const found = build(i ? `${seed}/retry${i}` : seed, options);
     if (found) return found;

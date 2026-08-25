@@ -22,8 +22,10 @@ const DICTIONARY = new Set(require(path.join(__dirname, "..", "..", "..", "data"
 const WORDS_PER_HINT = 3;
 const MIN_LENGTH = 4;
 
-const dailyPuzzle = (day) => buildStubbornly(`strands:daily:${day}`, THEMES, { msBudget: 2500 });
-const randomPuzzle = (seed) => buildStubbornly(`strands:free:${seed}`, THEMES, { msBudget: 2500 });
+/* A count of steps, not a duration - so the same day is the same board for
+ * everyone, however busy the machine that builds it. */
+const dailyPuzzle = (day) => buildStubbornly(`strands:daily:${day}`, THEMES, { budget: 20000 });
+const randomPuzzle = (seed) => buildStubbornly(`strands:free:${seed}`, THEMES, { budget: 20000 });
 
 const create = () => ({
   found: [],        // theme words, in the order they were found

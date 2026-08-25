@@ -142,17 +142,15 @@ function patternIsSound(grid, size) {
  * pattern sound. Growing a good pattern beats generating and rejecting whole
  * ones: every step is valid, so the loop always has something to return.
  */
-function makePattern(size, density, random, deadline = Infinity) {
+function makePattern(size, density, random) {
   const grid = new Array(size * size).fill(OPEN);
   const target = Math.floor(size * size * density);
 
   const cells = shuffle([...grid.keys()], random);
   let placed = 0;
-  let checked = 0;
 
   for (const cell of cells) {
     if (placed >= target) break;
-    if ((++checked & 15) === 0 && Date.now() > deadline) break;
     const mirror = size * size - 1 - cell;
     if (grid[cell] === BLACK || grid[mirror] === BLACK) continue;
 
@@ -237,7 +235,7 @@ function candidates(length, known) {
  * which turns the per-step cost from "every slot in the grid" into "the four
  * or five that just changed".
  */
-function fillGrid(grid, size, random, budget = 60000, deadline = Infinity) {
+function fillGrid(grid, size, random, budget = 6000) {
   const slots = slotsOf(grid, size);
   const letters = new Array(grid.length).fill(null);
 
@@ -257,15 +255,19 @@ function fillGrid(grid, size, random, budget = 60000, deadline = Infinity) {
   const filled = new Array(slots.length).fill(null);
   const used = new Set();
   const cache = new Array(slots.length).fill(null);
-  let steps = 0;
+
   /*
-   * Latched, not re-tested. Checking the clock on one call in sixty-four is
-   * cheap, but without remembering the answer the other sixty-three carry on
-   * doing full work and the search runs on long past its deadline - it only
-   * really stops when the step budget runs out. Once time is up it stays up,
-   * so the whole stack unwinds at once.
+   * The search stops on a count of steps, never on the clock.
+   *
+   * A grid is not stored anywhere - a round holds its seed, and the puzzle is
+   * rebuilt from that whenever it is needed. So the build has to be a pure
+   * function of the seed, and a wall-clock cutoff is the one thing that makes
+   * it not: the same seed on a busy machine gave up earlier and came back with
+   * a different grid. That meant two people could be handed different "daily"
+   * crosswords, and worse, a player's own letters - which are stored by square
+   * number - could come back sitting on a grid they were never typed into.
    */
-  let expired = false;
+  let steps = 0;
 
   const knownOf = (slot) => {
     const known = [];
@@ -281,15 +283,9 @@ function fillGrid(grid, size, random, budget = 60000, deadline = Infinity) {
   };
 
   function search() {
-    if (expired) return false;
+    /* Most patterns cannot be filled at all. Abandoning one after a fixed
+     * number of steps is how that is discovered, cheaply and repeatably. */
     if (++steps > budget) return false;
-    /* A wall-clock stop as well as a step count. Some patterns are not
-     * fillable at all, and the honest way to discover that is to give up on
-     * the clock rather than let a request hang. */
-    if ((steps & 63) === 0 && Date.now() > deadline) {
-      expired = true;
-      return false;
-    }
 
     let target = -1;
     let fewest = Infinity;
@@ -385,40 +381,30 @@ function numberGrid(grid, size) {
  * Patterns are cheap and fills are not, so a pattern that will not fill is
  * abandoned for a new one rather than laboured over.
  */
-function build(seed, { size, densities, attempts = 12, budget = 60000, msBudget = 4000 }) {
+function build(seed, { size, densities, attempts = 12, budget = 6000 }) {
   const random = rngFor(seed);
-  const deadline = Date.now() + msBudget;
 
   /*
    * A ladder rather than one density. An open grid - fewer black squares,
    * longer answers - makes the better puzzle, so it is tried first; each rung
    * up adds black squares, which shortens the answers and makes the fill
-   * easier. Walking up only when the rung below runs out of time means a
-   * build gets the best grid it can rather than a fixed one, and cannot come
-   * back empty-handed.
+   * easier. Walking up only when the rung below is exhausted means a build
+   * gets the best grid it can rather than a fixed one.
+   *
+   * Every rung gets the same fixed number of attempts, each with the same
+   * fixed step budget. Nothing here consults the clock, so this seed always
+   * produces this grid, on any machine, however busy.
    */
-  const ladder = densities;
-  const perRung = msBudget / ladder.length;
-
-  for (let rung = 0; rung < ladder.length; rung++) {
-    const density = ladder[rung];
-    /* The last rung inherits whatever time is left, so nothing is wasted. */
-    const rungDeadline = rung === ladder.length - 1
-      ? deadline
-      : Math.min(deadline, Date.now() + perRung);
-    const found = tryDensity(density, rungDeadline);
+  for (const density of densities) {
+    const found = tryDensity(density);
     if (found) return found;
   }
   return null;
 
-  function tryDensity(density, deadline) {
+  function tryDensity(density) {
   for (let attempt = 0; attempt < attempts; attempt++) {
-    if (Date.now() > deadline) break;
-    const grid = makePattern(size, density, random, deadline);
-    /* Share what is left of the budget across the attempts still to come, so
-     * one stubborn pattern cannot eat the lot. */
-    const slice = Math.max(250, (deadline - Date.now()) / Math.max(1, attempts - attempt));
-    const filled = fillGrid(grid, size, random, budget, Date.now() + slice);
+    const grid = makePattern(size, density, random);
+    const filled = fillGrid(grid, size, random, budget);
     if (!filled) continue;
 
     const numberAt = numberGrid(grid, size);

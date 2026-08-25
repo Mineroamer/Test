@@ -27,24 +27,32 @@ const SHAPES = {
     name: "The Crossword",
     size: 15,
     densities: [0.28, 0.32, 0.36, 0.42],
-    msBudget: 4000,
   },
   mini: {
     key: "mini",
     name: "The Mini",
     size: 5,
     densities: [0.08, 0.16],
-    msBudget: 1200,
   },
 };
 
 function makeGame(shape) {
+  /*
+   * Attempts and step budget, both fixed counts. Nothing here is a duration:
+   * the puzzle has to come out the same for everyone playing on the same day,
+   * and a build that gives up on the clock gives up sooner on a busy machine
+   * and comes back with a different grid.
+   *
+   * Six thousand steps is where the returns flatten out. Most patterns cannot
+   * be filled at all, and the ones that can are filled well inside it; raising
+   * it twentyfold buys about three more fills in forty and costs twenty times
+   * the work, all of it spent on patterns that were never going to fill.
+   */
   const options = {
     size: shape.size,
     densities: shape.densities,
     attempts: 16,
-    budget: 600000,
-    msBudget: shape.msBudget,
+    budget: 6000,
   };
 
   const dailyPuzzle = (day) => buildStubbornly(`${shape.key}:daily:${day}`, options);

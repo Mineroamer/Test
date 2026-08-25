@@ -131,10 +131,19 @@ function pocketSize(start, taken) {
  *
  * `taken[cell]` holds the index of the word covering it, or null.
  */
-function pack(chosen, random, deadline) {
+function pack(chosen, random, budget = 20000) {
   const taken = new Array(SIZE).fill(null);
   const all = [chosen.spangram, ...chosen.words];
   const placed = new Array(all.length).fill(null);
+  /*
+   * A count of steps, never the clock. A board is rebuilt from its seed every
+   * time it is needed, so a search that gives up on a deadline gives up sooner
+   * on a busy machine and comes back with a different board - which would mean
+   * two people playing different "daily" Strands. The budget is enormously
+   * generous: a pack that works wants about eight steps and has never wanted
+   * more than a thousand.
+   */
+  let steps = 0;
   let expired = false;
 
   /* The spangram first, while the board is empty enough to cross it. */
@@ -155,7 +164,7 @@ function pack(chosen, random, deadline) {
 
   function fillRest() {
     if (expired) return false;
-    if (Date.now() > deadline) { expired = true; return false; }
+    if (++steps > budget) { expired = true; return false; }
 
     /* The free square with the fewest free neighbours, so the board is filled
      * from its tightest corner outwards rather than its roomiest middle. */
@@ -220,19 +229,15 @@ function pack(chosen, random, deadline) {
 
 /* ----------------------------------------------------------------- build */
 
-function build(seed, themes, { msBudget = 3000, tries = 6 } = {}) {
+function build(seed, themes, { budget = 20000, tries = 6 } = {}) {
   const random = rngFor(seed);
   const theme = themes[Math.floor(random() * themes.length)];
-  const deadline = Date.now() + msBudget;
 
   for (let attempt = 0; attempt < tries; attempt++) {
-    if (Date.now() > deadline) break;
-
     const chosen = chooseWords(theme, random);
     if (!chosen) continue;
 
-    const slice = Math.min(deadline, Date.now() + msBudget / tries);
-    const packed = pack(chosen, random, slice);
+    const packed = pack(chosen, random, budget);
     if (!packed) continue;
 
     const letters = new Array(SIZE).fill("");

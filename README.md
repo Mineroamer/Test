@@ -280,8 +280,8 @@ public/                the browser app: no build step, no framework
   js/character.js      the wardrobe, drawn: every cosmetic as SVG paths
   js/screens/pass.js   the fifty-tier track and the wardrobe
   js/screens/board.js  the universal leaderboard
-tests/run.js           88 tests over the real HTTP server
-tests/play.js          15 tests that play every game through to a finish
+tests/run.js           96 tests over the real HTTP server
+tests/play.js          20 tests that play every game through to a finish
 scripts/build-data.mjs regenerates data/ from the source word lists
 scripts/build-artifact.mjs packs everything into one static HTML file
 scripts/check-hoisting.mjs catches helpers used before they exist
@@ -303,8 +303,33 @@ no game view knows which one it is talking to.
 | `HOST` | `127.0.0.1` | Set to `0.0.0.0` to accept connections from the network |
 | `DATA_FILE` | `./data/store.json` | Where accounts and rounds are kept |
 
-Daily puzzles turn over at the server's local midnight, and the countdown on
-the home screen is the real time until that happens.
+### One puzzle a day, the same one for everybody
+
+Every game has exactly one daily puzzle, and it is the same puzzle for everyone
+playing it. Two things make that true.
+
+The day turns over at **midnight UTC**, not at anybody's local midnight. The day
+number *is* the puzzle — each generator is handed it and deals today's board
+from it — so counting days off a local clock means Sydney and Los Angeles are on
+different numbers at the same moment, and get different words. On the hosted
+club that was invisible, because one server counted for everybody; in the
+single-page build, where each visitor's own browser does the counting, it was
+real. That build is the one people share by link, which is exactly where "did
+you get today's?" has to mean something. The cost is that the turnover is not at
+everyone's midnight — mid-morning in Sydney, late afternoon the day before in
+California. A puzzle cannot both change at your midnight and be the same as
+everyone else's.
+
+And a puzzle is built from its seed alone, never from the clock. Nothing is
+stored: a round holds a day number or a seed, and the board is rebuilt from it
+whenever it is needed. The crossword and Strands generators used to give up on a
+deadline, which meant the same seed produced a different grid on a busy machine
+— two people handed different "daily" crosswords, and a player's own letters,
+which are stored by square number, coming back on a grid they were never typed
+into. Both now stop on a count of steps, so the same day is the same board on
+any machine, however busy.
+
+The countdown on the home screen is the real time until that turnover.
 
 ## Tests
 
@@ -312,9 +337,9 @@ the home screen is the real time until that happens.
 npm test
 ```
 
-103 tests, in two suites, both against the real HTTP server.
+116 tests, in two suites, both against the real HTTP server.
 
-`tests/run.js` is 88 tests on the machinery: sessions, resuming a round, whether
+`tests/run.js` is 96 tests on the machinery: sessions, resuming a round, whether
 an answer leaks before it should, whether a finished round can be counted twice,
 whether two people racing for one username can both have it, whether the store
 is reachable over HTTP (it is not, and it holds password hashes), and whether a
@@ -328,12 +353,18 @@ that a finished round cannot be paid out twice, that you cannot wear what you
 have not unlocked, and that the board gives away a name and a level and nothing
 else.
 
-`tests/play.js` — also `npm run play` — is 15 tests that sit down and play. Every
+`tests/play.js` — also `npm run play` — is 20 tests that sit down and play. Every
 one of the nine games is driven to a finish over HTTP the way a person would
 play it: guessed, solved, traced, walked. Wordle is won and also lost; Connections
 is solved and also failed on four mistakes; Travle walks a shortest route and
 then reaches an island by sea. It is the suite that catches a game that is
 technically correct and unplayable.
+
+It also plays the whole matrix, because a game can be fine on its unlimited
+board and broken on its daily — those are different code paths. Every game is
+won on its daily and again on an unlimited board, Travle is walked on all four
+of its levels, and the three games that let you build a puzzle have one built,
+sent to somebody else's account, and won by them.
 
 `npm run check` runs first and catches one specific mistake this codebase kept
 making. The view modules set everything up, call `paint()`, return their

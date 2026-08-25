@@ -15,6 +15,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const { execFileSync } = require("node:child_process");
 
 const STORE = path.join(os.tmpdir(), `puzzle-club-test-${process.pid}.json`);
 process.env.DATA_FILE = STORE;
@@ -47,11 +48,16 @@ function client() {
     const headers = { "content-type": "application/json" };
     if (cookie) headers.cookie = cookie;
 
-    const res = await fetch(base + url, {
-      method,
-      headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
+    let res;
+    try {
+      res = await fetch(base + url, {
+        method, headers,
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+    } catch (err) {
+      console.log("       [client] " + (err.cause ? err.cause.code || err.cause.message : err.message));
+      throw err;
+    }
     const setCookie = res.headers.get("set-cookie");
     if (setCookie) cookie = setCookie.split(";")[0];
 
@@ -69,6 +75,19 @@ const answerTo = (runId) => puzzleForRun(store, store.data.runs[runId]);
 async function main() {
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   base = `http://127.0.0.1:${server.address().port}`;
+
+  /*
+   * The tests and the server share one process, so a test that spends several
+   * seconds in a generator blocks the server's event loop as surely as it
+   * blocks its own. When the loop frees up, the keep-alive timer reaps the
+   * idle sockets it was holding and the next request on a pooled one dies with
+   * ECONNRESET - a failure that says nothing about the server and everything
+   * about running it in here. Neither timer earns its keep against a client
+   * that is this file.
+   */
+  server.keepAliveTimeout = 0;
+  server.headersTimeout = 0;
+  server.requestTimeout = 0;
   console.log(`testing against ${base}\n`);
 
   /* ------------------------------------------------------------ session */
@@ -191,6 +210,236 @@ async function main() {
   });
 
   /* -------------------------------------------------------------- play */
+
+  /* ------------------------------------------------- one daily for everyone */
+
+  console.log("\ntoday's puzzles");
+
+  await test("the day turns over at midnight UTC, exactly", async () => {
+    const { dayNumber, msUntilReset, startOfDay, dayLabel } = require("../src/server/rng.js");
+
+    const justBefore = new Date("2026-08-25T23:59:59.999Z");
+    const justAfter = new Date("2026-08-26T00:00:00.000Z");
+    assert.equal(dayNumber(justAfter), dayNumber(justBefore) + 1, "one day apart across the line");
+    assert.equal(dayLabel(dayNumber(justBefore)), "2026-08-25");
+    assert.equal(dayLabel(dayNumber(justAfter)), "2026-08-26");
+
+    /* Noon and one second later are the same day. */
+    assert.equal(dayNumber(new Date("2026-08-25T12:00:00Z")), dayNumber(justBefore));
+
+    assert.equal(msUntilReset(justBefore), 1, "a millisecond left on the clock");
+    assert.equal(msUntilReset(justAfter), 86400000, "a whole day on the new one");
+    assert.equal(startOfDay(justBefore), Date.parse("2026-08-25T00:00:00Z"));
+  });
+
+  await test("the same moment is the same day in every timezone", async () => {
+    /*
+     * The day number is the puzzle. Read off a local clock it differs by
+     * timezone, which is invisible while a server does the counting and
+     * quietly wrong in the single-page build, where each visitor's own browser
+     * counts. Node fixes its zone at startup, so each one is asked in its own
+     * process.
+     */
+    const zones = [
+      "UTC", "Australia/Sydney", "America/Los_Angeles", "Asia/Tokyo",
+      "Europe/London", "Pacific/Kiritimati", "Pacific/Niue", "Asia/Kathmandu",
+    ];
+    const script = `
+      const { dayNumber } = require(${JSON.stringify(path.join(__dirname, "..", "src", "server", "rng.js"))});
+      const games = require(${JSON.stringify(path.join(__dirname, "..", "src", "server", "games", "index.js"))});
+      const day = dayNumber(new Date(process.argv[1]));
+      const wordle = games.get("wordle").dailyPuzzle(day).answer;
+      const bee = games.get("bee").dailyPuzzle(day).letters;
+      process.stdout.write(JSON.stringify({ day, wordle, bee }));
+    `;
+
+    /* An instant late in the UTC day, when local dates disagree most. */
+    const instant = "2026-08-25T22:30:00Z";
+    const answers = zones.map((tz) =>
+      execFileSync(process.execPath, ["-e", script, instant], {
+        env: { ...process.env, TZ: tz }, encoding: "utf8",
+      }));
+
+    for (const answer of answers) {
+      assert.equal(answer, answers[0], "every timezone must deal the same puzzle");
+    }
+    assert.ok(JSON.parse(answers[0]).wordle, "and an actual puzzle, not nothing");
+  });
+
+  await test("two players get the identical daily, in every game", async () => {
+    /* The real question behind all of the above: can two people compare? */
+    const one = client();
+    const two = client();
+    await one("GET", "/api/me");
+    await two("GET", "/api/me");
+    await one("POST", "/api/auth/signup", { handle: "sameday1", password: "one puzzle a day" });
+    await two("POST", "/api/auth/signup", { handle: "sameday2", password: "one puzzle a day" });
+
+    for (const key of ["wordle", "connections", "bee", "boxed", "mini", "crossword", "strands", "pips"]) {
+      const a = await one("POST", `/api/play/${key}`, { mode: "daily" });
+      const b = await two("POST", `/api/play/${key}`, { mode: "daily" });
+
+      assert.notEqual(a.body.run.id, b.body.run.id, `${key}: two people, two rounds`);
+      assert.equal(a.body.run.day, b.body.run.day, `${key}: same day number`);
+      assert.equal(a.body.run.dayLabel, b.body.run.dayLabel, `${key}: same date`);
+
+      /* Same puzzle, judged by what the server computes for each of them. */
+      const mine = answerTo(a.body.run.id);
+      const theirs = answerTo(b.body.run.id);
+      assert.deepEqual(
+        JSON.parse(JSON.stringify(mine)),
+        JSON.parse(JSON.stringify(theirs)),
+        `${key}: the two dailies are not the same puzzle`
+      );
+    }
+  });
+
+  await test("Travle's three daily levels are each the same for everyone", async () => {
+    const one = client();
+    const two = client();
+    await one("GET", "/api/me");
+    await two("GET", "/api/me");
+
+    const seen = new Set();
+    for (const difficulty of ["scenic", "standard", "expert"]) {
+      const a = await one("POST", "/api/play/travle", { mode: "daily", difficulty });
+      const b = await two("POST", "/api/play/travle", { mode: "daily", difficulty });
+
+      const mine = answerTo(a.body.run.id);
+      const theirs = answerTo(b.body.run.id);
+      assert.equal(mine.start, theirs.start, `${difficulty}: different starting country`);
+      assert.equal(mine.end, theirs.end, `${difficulty}: different destination`);
+      seen.add(`${mine.start}>${mine.end}`);
+    }
+    /* And the three levels are three different walks, not one walk thrice. */
+    assert.equal(seen.size, 3, "the daily levels should be different routes");
+  });
+
+  await test("a puzzle is built from its seed alone, never from the clock", async () => {
+    /*
+     * A round stores a seed, not a puzzle - the board is rebuilt from that
+     * whenever it is needed. So a generator that gives up on a deadline is
+     * not just slow, it is wrong: on a busy machine it stops sooner and comes
+     * back with a different grid. That handed two people different "daily"
+     * crosswords, and could bring a player's own letters - stored by square
+     * number - back on a grid they were never typed into.
+     */
+    const fs = require("node:fs");
+    for (const file of ["crossword.js", "pips.js", "strands.js"]) {
+      const source = fs.readFileSync(path.join(__dirname, "..", "src", "server", file), "utf8");
+      const clock = source.match(/Date\.now\(\)|performance\.now\(\)|new Date\(\)/g);
+      assert.equal(clock, null, `${file} consults the clock while building: ${clock}`);
+    }
+
+    /* And the proof of it: build the same thing twice. */
+    for (const key of ["mini", "crossword", "strands", "pips"]) {
+      const game = games.get(key);
+      const first = JSON.stringify(game.dailyPuzzle(1234));
+      const second = JSON.stringify(game.dailyPuzzle(1234));
+      assert.equal(first, second, `${key} built differently the second time`);
+    }
+  });
+
+  await test("every puzzle's own answer actually answers it", async () => {
+    /*
+     * The generators all work backwards from an answer and then describe it -
+     * as rules, as clues, as a route. Nothing checks that description against
+     * the answer unless something like this does.
+     *
+     * Pips got this wrong: a region holding a single zero could be described
+     * as "adds up to more than 0", which its own answer breaks. The board was
+     * still solvable another way, so the uniqueness check passed it, and what
+     * broke was the answer kept for hints and for giving up - on about one
+     * board in twenty-five, following the hints walked you somewhere that
+     * could never be finished.
+     */
+    const pips = require("../src/server/pips.js");
+    const pipsGame = games.get("pips");
+
+    for (let seed = 0; seed < 60; seed += 1) {
+      const puzzle = pipsGame.randomPuzzle("answers-itself:" + seed);
+      const value = new Map();
+      for (const home of puzzle.layout) {
+        value.set(home.cells[0], home.values[0]);
+        value.set(home.cells[1], home.values[1]);
+      }
+      for (const region of puzzle.regions) {
+        const numbers = region.cells.map((key) => value.get(key));
+        assert.ok(pips.holds(region.rule, numbers, 0),
+          `pips ${seed}: ${JSON.stringify(region.rule)} is broken by ${JSON.stringify(numbers)}`);
+      }
+
+      /* And laying that answer out really does win the round. */
+      const state = pipsGame.create(puzzle);
+      for (const home of puzzle.layout) {
+        const [first] = puzzle.dominoes[home.domino];
+        pipsGame.guess(puzzle, state, {
+          domino: home.domino,
+          cells: home.cells.map((key) => key.split(",").map(Number)),
+          flip: home.values[0] !== first,
+        });
+      }
+      assert.equal(state.status, "won", `pips ${seed}: its own answer does not win`);
+    }
+
+    /* Letter Boxed keeps the two words it was built from; they must solve it. */
+    const boxed = games.get("boxed");
+    for (let seed = 0; seed < 40; seed += 1) {
+      const puzzle = boxed.randomPuzzle("answers-itself:" + seed);
+      const state = boxed.create(puzzle);
+      for (const word of puzzle.solution) {
+        const result = boxed.guess(puzzle, state, word);
+        assert.equal(result.ok, true, `boxed ${seed}: ${word} was refused - ${result.message}`);
+      }
+      assert.equal(state.status, "won", `boxed ${seed}: its own solution does not solve it`);
+    }
+
+    /* Strands: every theme word must trace along the path it was laid on. */
+    const strands = games.get("strands");
+    for (let seed = 0; seed < 30; seed += 1) {
+      const puzzle = strands.randomPuzzle("answers-itself:" + seed);
+      const state = strands.create(puzzle);
+      for (const entry of puzzle.entries) {
+        const result = strands.guess(puzzle, state, entry.cells);
+        assert.equal(result.ok, true, `strands ${seed}: ${entry.word} was refused`);
+      }
+      assert.equal(state.status, "won", `strands ${seed}: its own words do not finish it`);
+    }
+  });
+
+  await test("every game deals a daily, day after day", async () => {
+    /*
+     * A daily that cannot be built is not a bad puzzle, it is an error page
+     * for everybody, all day. Pips used to leave about one day in seven
+     * hundred and fifty with nothing at all - day 999 was one of them.
+     */
+    const quick = ["wordle", "connections", "bee", "boxed", "strands", "pips", "mini"];
+    for (let day = 995; day < 1005; day += 1) {
+      for (const key of quick) {
+        assert.doesNotThrow(() => games.get(key).dailyPuzzle(day), `${key} could not deal day ${day}`);
+      }
+      for (const level of ["scenic", "standard", "expert"]) {
+        assert.doesNotThrow(() => games.get("travle").dailyPuzzle(day, level),
+          `travle ${level} could not deal day ${day}`);
+      }
+    }
+  });
+
+  await test("today's puzzle is today's, whatever hour it is asked for", async () => {
+    /* A puzzle dealt at one minute past midnight and one at half past eleven
+     * are the same puzzle: the generator sees a day, not a clock. */
+    const { dayNumber } = require("../src/server/rng.js");
+    const early = dayNumber(new Date("2026-08-25T00:00:01Z"));
+    const late = dayNumber(new Date("2026-08-25T23:59:00Z"));
+    assert.equal(early, late);
+
+    for (const key of ["wordle", "connections", "bee", "boxed", "strands", "pips", "mini", "crossword"]) {
+      const game = games.get(key);
+      const first = JSON.stringify(game.dailyPuzzle(early));
+      const second = JSON.stringify(game.dailyPuzzle(late));
+      assert.equal(first, second, `${key} deals differently within one day`);
+    }
+  });
 
   console.log("\nplaying");
 
@@ -518,7 +767,20 @@ async function main() {
     for (const entry of real.entries) for (const cell of entry.cells) covered[cell] += 1;
     assert.ok(covered.every((n) => n === 1), "every square belongs to exactly one word");
     assert.equal(real.entries.filter((e) => e.spangram).length, 1, "exactly one spangram");
-    assert.equal(JSON.stringify(puzzle).includes(real.entries[1].word), false, "a word leaked");
+    /*
+     * What must not be sent is a word list, and that is a structural question.
+     * Scanning the payload for a word as a substring is not: the board is a
+     * grid of the letters those words are made of, so a word laid straight
+     * along a row is a substring of it by construction. That check failed
+     * whenever the seed happened to lay one horizontally.
+     */
+    assert.equal(puzzle.entries, undefined, "the board must not carry its entries");
+    assert.equal(puzzle.words, undefined, "nor a word list");
+    for (const found of puzzle.found || []) {
+      assert.equal(typeof found, "string", "only words already found are named");
+    }
+    assert.ok(real.entries.every((entry) => entry.word && entry.cells),
+      "the server's own copy still has them");
   });
 
   await test("strands accepts a traced word and refuses a broken path", async () => {

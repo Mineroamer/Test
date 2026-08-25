@@ -54,25 +54,38 @@ function sample(list, n, random) {
 }
 
 /*
- * Day numbering. Every game counts days from the same epoch and uses the
- * server's local midnight, so "today's puzzles" is one consistent idea across
- * the whole app and the countdown on the home screen is true for all of them.
+ * Day numbering. Every game counts days from the same epoch, and the day turns
+ * over at midnight UTC.
+ *
+ * UTC, not local midnight, because the day number *is* the puzzle: every game
+ * deals today's board by feeding this number to its generator. Read off the
+ * local clock, the same instant is a different number in Sydney and in Los
+ * Angeles, so the two of them get different words - which is fine while a
+ * server is doing the counting and answers everybody the same way, and quietly
+ * wrong in the single-page build, where the counting happens in each visitor's
+ * own browser. That build is the one people share by link, so it is exactly
+ * the case where "did you get today's?" has to mean something.
+ *
+ * The cost is that the turnover is not at everybody's midnight: it lands
+ * mid-morning in Sydney and late afternoon the day before in California. That
+ * is the unavoidable trade. A puzzle cannot both change at your midnight and
+ * be the same as everyone else's.
  */
 const EPOCH = Date.UTC(2024, 0, 1);
+const DAY = 86400000;
 
 function dayNumber(date = new Date()) {
-  const local = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
-  return Math.floor((local - EPOCH) / 86400000);
+  const midnight = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+  return Math.floor((midnight - EPOCH) / DAY);
 }
 
 function msUntilReset(now = new Date()) {
-  const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-  return midnight - now;
+  return startOfDay(now) + DAY - now.getTime();
 }
 
-/** The wall-clock moment the current puzzle day began, as a timestamp. */
+/** The moment the current puzzle day began, as a timestamp. */
 function startOfDay(now = new Date()) {
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  return EPOCH + dayNumber(now) * DAY;
 }
 
 /** The day number as YYYY-MM-DD, for anything a person will read. */
