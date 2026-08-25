@@ -20,6 +20,10 @@ import { ApiError } from "./api.js";
 
 const games = window.PC.games;
 const { dayNumber, msUntilReset, dayLabel } = window.PC.rng;
+/* The same two files the server scores with, so a level here means the same
+ * thing it means on the hosted club. */
+const xp = window.PC.xp;
+const cosmetics = window.PC.cosmetics;
 
 const CATALOGUE = window.PC.catalogue;
 const STORE_KEY = "pc:local";
@@ -32,7 +36,11 @@ const STORE_KEY = "pc:local";
  * throw, so every touch is guarded and the app simply forgets between visits
  * rather than breaking.
  */
-const blank = () => ({ player: null, runs: {}, stats: {}, results: [], progress: {} });
+const blank = () => ({
+  player: null, runs: {}, stats: {}, results: [], progress: {},
+  /* The pass, per device rather than per account - there is no account. */
+  pass: { xp: 0, character: null, seenLevel: 1 },
+});
 
 let state = load();
 
@@ -128,6 +136,7 @@ function view(run) {
       ? { title: shared.t, code: run.code, by: { display: shared.b || "a friend" }, note: (shared.p && shared.p.note) || "" }
       : null,
     summary: game.finished(run.state) ? game.summary(puzzle, run.state) : null,
+    earned: run.earned || null,
   };
 }
 
@@ -177,6 +186,11 @@ function settle(run) {
     };
   }
 
+  /* Counted before the round is logged: the unlimited taper asks how many
+   * rounds of this game came earlier today, and this one is not earlier than
+   * itself. Same order as the server, for the same reason. */
+  run.earned = awardXp(run, summary);
+
   state.results.push({
     game: run.game, mode: run.mode, day: run.day ?? null,
     won: !!summary.won, guesses: summary.guesses || 0, hints: summary.hints || 0,
@@ -184,6 +198,52 @@ function settle(run) {
   });
   if (state.results.length > 250) state.results = state.results.slice(-250);
   save();
+}
+
+/* ------------------------------------------------------------- the pass */
+
+/* Only a named player earns. Same rule as the server, where a guest plays
+ * everything and nothing is written down. */
+function awardXp(run, summary) {
+  if (!state.player) return null;
+
+  const since = new Date(new Date().setHours(0, 0, 0, 0)).getTime();
+  const already = state.results.filter((r) => r.game === run.game && r.at >= since).length;
+
+  const before = xp.progressFor(state.pass.xp);
+  const earned = xp.award({
+    game: run.game, mode: run.mode, difficulty: run.difficulty,
+    summary, took: run.finishedAt - run.startedAt, already,
+  });
+
+  state.pass.xp += earned.xp;
+  const after = xp.progressFor(state.pass.xp);
+  const gained = [];
+  for (let level = before.level + 1; level <= after.level; level += 1) {
+    gained.push(...cosmetics.rewardsAt(level));
+  }
+
+  return {
+    xp: earned.xp, won: earned.won, quality: earned.quality, weight: earned.weight,
+    repeat: run.mode !== "daily" && already >= xp.FREE_ROUNDS,
+    before: before.level, after: after.level,
+    levelled: after.level > before.level,
+    unlocked: gained,
+    progress: after,
+  };
+}
+
+/** The pass as the screens want it, built the same way the server builds it. */
+function passView() {
+  const progress = xp.progressFor(state.pass.xp);
+  if (!state.pass.character) state.pass.character = cosmetics.starter(190);
+  return {
+    ...progress,
+    character: state.pass.character,
+    pending: progress.level > (state.pass.seenLevel || 1) ? (state.pass.seenLevel || 1) : null,
+    unlocked: cosmetics.unlockedAt(progress.level).map((item) => ({ ...item })),
+    track: cosmetics.track(xp, progress.level),
+  };
 }
 
 /** Today's finished dailies, for the home screen. */
@@ -245,6 +305,7 @@ export const api = {
     catalogue: CATALOGUE,
     difficulties: games.travle.DIFFICULTIES,
     progress: todayProgress(),
+    pass: state.player ? passView() : null,
     local: true,
   }),
 
@@ -340,6 +401,84 @@ export const api = {
     return { run: view(run) };
   },
 
+  pass: async () => ({
+    pass: passView(),
+    rules: {
+      levels: xp.LEVELS,
+      thresholds: xp.THRESHOLDS,
+      base: xp.BASE,
+      modeWeight: xp.MODE_WEIGHT,
+      freeRounds: xp.FREE_ROUNDS,
+      travleWeight: xp.TRAVLE_WEIGHT,
+      floor: xp.FLOOR,
+      lossShare: xp.LOSS_SHARE,
+      slots: cosmetics.SLOTS,
+      skins: cosmetics.SKINS,
+      rarities: cosmetics.RARITY,
+    },
+  }),
+
+  equip: async (character) => {
+    state.pass.character = cosmetics.sanitise(character, xp.levelFor(state.pass.xp), 190);
+    save();
+    return { character: state.pass.character, pass: passView() };
+  },
+
+  passSeen: async () => {
+    state.pass.seenLevel = xp.levelFor(state.pass.xp);
+    save();
+    return { seenLevel: state.pass.seenLevel };
+  },
+
+  /*
+   * There is nobody else here to rank against. Rather than showing an empty
+   * board or pretending, the board shows the one real row it has - yours -
+   * and the screen says where the rest of the club lives.
+   */
+  board: async (window) => {
+    if (!state.player) return { window: window || "all", total: 0, rows: [], you: null, alone: true };
+    const week = Date.now() - 7 * 86400000;
+    const earned = state.results.filter((r) => r.at >= week).length;
+    const progress = xp.progressFor(state.pass.xp);
+    const title = cosmetics.find("title", passView().character.title);
+    return {
+      window: window === "week" ? "week" : "all",
+      total: 1,
+      alone: true,
+      rows: [{
+        id: "local", rank: 1,
+        handle: state.player.toLowerCase().replace(/[^a-z0-9_]/g, ""),
+        display: state.player, colour: 190,
+        character: passView().character,
+        title: title ? title.name : null,
+        level: progress.level, xp: progress.xp,
+        week: earned ? progress.xp : 0,
+        rounds: state.results.length,
+      }],
+      you: null,
+    };
+  },
+
+  player: async () => {
+    const progress = xp.progressFor(state.pass.xp);
+    const rows = Object.values(state.stats);
+    const title = cosmetics.find("title", passView().character.title);
+    return {
+      player: {
+        id: "local",
+        handle: String(state.player || "player").toLowerCase().replace(/[^a-z0-9_]/g, ""),
+        display: state.player || "Player",
+        colour: 190,
+        character: passView().character,
+        title: title ? title.name : null,
+        level: progress.level, xp: progress.xp,
+      },
+      played: rows.reduce((n, b) => n + b.played, 0),
+      won: rows.reduce((n, b) => n + b.won, 0),
+      bestStreak: rows.reduce((n, b) => Math.max(n, b.maxStreak), 0),
+    };
+  },
+
   stats: async () => {
     const per = statsFor();
     const list = Object.values(per);
@@ -365,7 +504,7 @@ export const api = {
   addFriend: async () => { throw new ApiError(400, "Friends need the full version, running on a server."); },
   respond: async () => ({ ok: true }),
   unfriend: async () => ({ ok: true }),
-  leaderboard: async () => ({ rows: [], you: null }),
+  friendsBoard: async () => ({ rows: [], you: null }),
 
   /* A puzzle is its own link: nothing is stored, so nothing can be lost. */
   createPuzzle: async ({ game, title, payload }) => {

@@ -181,6 +181,60 @@ already added you, that just means yes.
 The standings rank on daily wins, then streak, then fewest hints. Unlimited
 rounds are deliberately left out — they would only measure spare time.
 
+## XP, the pass and the board
+
+Every finished round is worth XP, and the amount depends on how the round went
+rather than that it happened. Each game says so in its own terms: guesses for
+Wordle, mistakes for Connections, how much of the hive you found for the Bee,
+words used for Letter Boxed, help taken and then the clock for the crosswords,
+hints for Strands and Pips, guesses past the shortest route for Travle. A hint
+costs something everywhere — a puzzle you were told the answer to is not a
+puzzle you solved. A round you lost is still worth a fifth of the game's value,
+because turning up counts for something.
+
+A daily pays in full and can only be played once. **Unlimited pays a third, and
+tapers after three rounds of the same game in a day.** That is the whole design
+in one line: a board that paid by the hour would rank whoever had the most free
+time, which is not the same thing as playing well — the same objection the
+stats page already raises against unlimited streaks.
+
+XP is only recorded for an account. A guest can play everything and nothing is
+written down.
+
+### The pass
+
+Fifty levels, one reward per level, 118,090 XP from end to end — about a season
+of doing the dailies. It is shaped like an old battle pass on purpose: one
+reward per tier, no branches, no currency, the big ones at round numbers, and
+the whole track visible from the start so you can see what you are walking
+towards. What it does not have is the part that made those passes a business.
+Nothing is bought, nothing expires, and no tier is locked behind anything but
+playing.
+
+Everything on it is cosmetic. There are fifty-seven pieces across seven slots —
+outfit, head, face, what you are holding, backdrop, frame and title — and none
+of them makes a puzzle easier, gives a hint, or moves you up the board. It is a
+hat. Two things stay free and unlocked from the first round, and it is worth
+saying why: **skin tone and accent colour**. Those are how a person looks, not a
+reward for grinding, and putting them behind level 30 would be a nasty thing to
+do.
+
+The character is drawn as one SVG built from the slots — no images to load,
+which is what lets sixty of them sit on a leaderboard at once and lets the
+single-page build carry the whole wardrobe without growing a sprite sheet.
+
+### The board
+
+Everyone with an account is on it, friends or not. You do not need to be signed
+in to look — a standings board only members can see is a poster in a locked
+room — but you do need an account to be on it. All time ranks on total XP; this
+week ranks on the last seven days, which is the board somebody who joined on
+Tuesday can actually win.
+
+Being on it means a handle, a display name, a level and a character are visible
+to anyone who can reach the server. Nothing else is: no email is ever asked
+for, and what you played and when is not published.
+
 ## Building a puzzle
 
 Build one, get a six-character code, send it to whoever you like. They get one
@@ -202,13 +256,19 @@ src/server/
   http.js              router, body reading, static serving
   rng.js               seeded randomness and the shared idea of "today"
   stats.js             tallies, streaks, the friends feed
+  xp.js                what a round is worth, and the fifty-level curve
+  cosmetics.js         the pass: every item, its slot, rarity and tier
+  progress.js          the seam between those two and the store
   api.js               every route the browser calls
   games/               one module per game, all with the same shape
 data/                  generated word lists, and the store — never served
 public/                the browser app: no build step, no framework
   js/games/travle/     the original game's engine and map, used by both sides
-tests/run.js           69 tests over the real HTTP server
-tests/play.js          14 tests that play every game through to a finish
+  js/character.js      the wardrobe, drawn: every cosmetic as SVG paths
+  js/screens/pass.js   the fifty-tier track and the wardrobe
+  js/screens/board.js  the universal leaderboard
+tests/run.js           87 tests over the real HTTP server
+tests/play.js          15 tests that play every game through to a finish
 scripts/build-data.mjs regenerates data/ from the source word lists
 scripts/build-artifact.mjs packs everything into one static HTML file
 scripts/check-hoisting.mjs catches helpers used before they exist
@@ -239,15 +299,23 @@ the home screen is the real time until that happens.
 npm test
 ```
 
-83 tests, in two suites, both against the real HTTP server.
+102 tests, in two suites, both against the real HTTP server.
 
-`tests/run.js` is 69 tests on the machinery: sessions, resuming a round, whether
+`tests/run.js` is 87 tests on the machinery: sessions, resuming a round, whether
 an answer leaks before it should, whether a finished round can be counted twice,
 whether two people racing for one username can both have it, whether the store
 is reachable over HTTP (it is not, and it holds password hashes), and whether a
 dealt Pips board really does have the single answer its generator claims.
 
-`tests/play.js` — also `npm run play` — is 14 tests that sit down and play. Every
+Eighteen of those are the XP system: that the curve pays for playing well and
+not for playing often, that hints cost something in every game that has one,
+that unlimited tapers, that the fifty tiers each hand over exactly one thing,
+that every cosmetic on the track has a drawing and every drawing has a tier,
+that a finished round cannot be paid out twice, that you cannot wear what you
+have not unlocked, and that the board gives away a name and a level and nothing
+else.
+
+`tests/play.js` — also `npm run play` — is 15 tests that sit down and play. Every
 one of the nine games is driven to a finish over HTTP the way a person would
 play it: guessed, solved, traced, walked. Wordle is won and also lost; Connections
 is solved and also failed on four mistakes; Travle walks a shortest route and

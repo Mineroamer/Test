@@ -18,6 +18,8 @@ export const state = {
   catalogue: [],
   difficulties: {},
   progress: {},
+  /* Level, XP and what is unlocked. Null for a guest, who has none of it. */
+  pass: null,
 };
 
 const screen = document.getElementById("screen");
@@ -80,12 +82,37 @@ function paintAccount() {
    * neither, so the section is not offered there rather than offered and
    * then found empty. */
   const sections = state.local
-    ? [["#/create", "Build"], ["#/stats", "Stats"]]
-    : [["#/friends", "Friends"], ["#/create", "Build"], ["#/stats", "Stats"]];
+    ? [["#/pass", "Pass"], ["#/board", "Board"], ["#/create", "Build"], ["#/stats", "Stats"]]
+    : [["#/friends", "Friends"], ["#/pass", "Pass"], ["#/board", "Board"], ["#/create", "Build"], ["#/stats", "Stats"]];
 
   swap(nav, state.user
     ? sections.map(([href, label]) => h("a.btn.ghost.small", { href }, label))
-    : []);
+    /* The board is the one section worth offering before signing up: it is
+     * the thing an account gets you onto. */
+    : [h("a.btn.ghost.small", { href: "#/board" }, "Board")]);
+
+  paintLevel();
+}
+
+/*
+ * The level pip in the header. It is the only place progress shows up while
+ * you are playing, which is on purpose - a bar that fills in your peripheral
+ * vision during a puzzle is a distraction from the puzzle.
+ */
+function paintLevel() {
+  const slot = document.getElementById("level-pip");
+  if (!slot) return;
+  if (!state.user || !state.pass) { clear(slot); return; }
+
+  const pass = state.pass;
+  swap(slot, h("a.level-pip", {
+    href: "#/pass",
+    title: pass.maxed
+      ? `Level ${pass.level} · the whole track is yours`
+      : `Level ${pass.level} · ${pass.needs.toLocaleString()} XP to the next`,
+  },
+    h("b", {}, String(pass.level)),
+    h("span.pip-bar", h("span.pip-fill", { style: { width: `${Math.round(pass.share * 100)}%` } }))));
 }
 
 /* Mark the section that is showing, so the bar says where you are. */
@@ -111,6 +138,8 @@ const SCREENS = {
   stats: () => import("./screens/stats.js"),
   create: () => import("./screens/create.js"),
   play: () => import("./screens/play.js"),
+  pass: () => import("./screens/pass.js"),
+  board: () => import("./screens/board.js"),
 };
 
 let token = 0;
@@ -159,6 +188,17 @@ async function pick(parts) {
       const mod = await SCREENS.stats();
       return mod.render();
     }
+    case "pass": {
+      requireUser();
+      const mod = await SCREENS.pass();
+      return mod.render();
+    }
+    case "board": {
+      /* Deliberately not behind requireUser: anyone may look at the standings,
+       * they just cannot be on them without an account. */
+      const mod = await SCREENS.board();
+      return mod.render();
+    }
     case "create": {
       requireUser();
       const mod = await SCREENS.create();
@@ -195,7 +235,21 @@ class Redirect extends Error {}
 export function afterSignin() {
   const wanted = sessionStorage.getItem("pc:after-signin");
   sessionStorage.removeItem("pc:after-signin");
-  go(wanted && wanted !== "#/signin" ? wanted : "#/");
+
+  /*
+   * Only redirect if they are still looking at the form.
+   *
+   * Signing in is a request over the network, and people do not wait politely
+   * for it: they tap a game, or hit back. This used to fire regardless, so
+   * anyone who moved during that second was hauled back to the home screen -
+   * and, worse, whatever they had opened was left half-built with its keyboard
+   * listener still on the document, so the next screen would not take input.
+   * If they have already gone somewhere, that is where they want to be.
+   */
+  const here = location.hash || "#/";
+  if (!here.startsWith("#/signin")) return;
+
+  go(wanted && !wanted.startsWith("#/signin") ? wanted : "#/");
 }
 
 function problem(err) {
@@ -232,4 +286,4 @@ window.addEventListener("hashchange", route);
 })();
 
 /* Screens use these to talk back to the shell. */
-export { screen, paintAccount, toast, clear };
+export { screen, paintAccount, paintLevel, toast, clear };

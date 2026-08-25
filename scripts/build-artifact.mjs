@@ -144,6 +144,15 @@ function buildEngines() {
     .replace(/^"use strict";\n/, "")
     .replace(/module\.exports = /, "return ");
 
+  /* The XP formula and the cosmetic track. Both are plain modules with no
+   * requires of their own, so packing them is only stripping the wrapper -
+   * and it means a level means the same thing here as on the hosted club. */
+  const plain = (file) => read("src", "server", file)
+    .replace(/^"use strict";\n/, "")
+    .replace(/^const xp = require\("\.\/xp\.js"\);\n/m, "")
+    .replace(/^const cosmetics = require\("\.\/cosmetics\.js"\);\n/m, "")
+    .replace(/module\.exports = /, "return ");
+
   /* The catalogue is the one thing the registry holds that is pure content,
    * so it is lifted out of the server's index rather than duplicated. */
   const registry = read("src", "server", "games", "index.js");
@@ -154,6 +163,12 @@ function buildEngines() {
 
   return `PC.rng = (function () {\n${rng}\n})();
 PC.catalogue = ${catalogue};
+PC.xp = (function () {
+${plain("xp.js")}
+})();
+PC.cosmetics = (function () {
+${plain("cosmetics.js")}
+})();
 PC.crosswordBuilder = (function () {
 ${builder}
 })();
@@ -224,6 +239,7 @@ return { ${[...exported].join(", ")} };
 const KEY_FOR = {
   "./api.js": "api", "../api.js": "api",
   "./ui.js": "ui", "../ui.js": "ui",
+  "./character.js": "character", "../character.js": "character",
   "./share.js": "share", "../share.js": "share",
   "./app.js": "app", "../app.js": "app",
   "./local-api.js": "local-api",
@@ -233,6 +249,9 @@ const KEY_FOR = {
   "./screens/stats.js": "screens/stats",
   "./screens/create.js": "screens/create",
   "./screens/play.js": "screens/play",
+  "./screens/pass.js": "screens/pass",
+  "./pass.js": "screens/pass",
+  "./screens/board.js": "screens/board",
   "../games/wordle.js": "games/wordle",
   "../games/connections.js": "games/connections",
   "../games/bee.js": "games/bee",
@@ -253,6 +272,8 @@ function resolve(from) {
  * its `api` from the registry at definition time. */
 const ORDER = [
   ["api", ["public", "js", "api.js"]],
+  /* Before ui, which draws every avatar through it. */
+  ["character", ["public", "js", "character.js"]],
   ["ui", ["public", "js", "ui.js"]],
   ["share", ["public", "js", "share.js"]],
   ["local-api", ["public", "js", "local-api.js"]],
@@ -270,6 +291,8 @@ const ORDER = [
   ["screens/auth", ["public", "js", "screens", "auth.js"]],
   ["screens/stats", ["public", "js", "screens", "stats.js"]],
   ["screens/create", ["public", "js", "screens", "create.js"]],
+  ["screens/pass", ["public", "js", "screens", "pass.js"]],
+  ["screens/board", ["public", "js", "screens", "board.js"]],
   ["screens/play", ["public", "js", "screens", "play.js"]],
 ];
 

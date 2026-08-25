@@ -25,6 +25,7 @@ const EMPTY = () => ({
   runs: {},          // id -> a game in progress, so a refresh resumes it
   results: [],       // finished rounds, newest last; trimmed per user
   stats: {},         // userId -> { "game:mode" -> tallies }
+  progress: {},      // userId -> { xp, level, character, awards } - the pass
   puzzles: {},       // share code -> a puzzle somebody built
 });
 

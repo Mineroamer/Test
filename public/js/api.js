@@ -56,11 +56,17 @@ export const api = {
   reveal: (id) => call("POST", `/api/runs/${id}/reveal`, {}),
 
   stats: () => call("GET", "/api/stats"),
+  pass: () => call("GET", "/api/pass"),
+  equip: (character) => call("PUT", "/api/pass/character", { character }),
+  passSeen: () => call("POST", "/api/pass/seen", {}),
+  /* The board everybody is on, not the one just your friends are on. */
+  board: (window) => call("GET", `/api/leaderboard${window === "week" ? "?window=week" : ""}`),
+  player: (handle) => call("GET", `/api/players/${encodeURIComponent(handle)}`),
   friends: () => call("GET", "/api/friends"),
   addFriend: (handle) => call("POST", "/api/friends/request", { handle }),
   respond: (id, accept) => call("POST", "/api/friends/respond", { id, accept }),
   unfriend: (id) => call("DELETE", `/api/friends/${id}`),
-  leaderboard: () => call("GET", "/api/friends/leaderboard"),
+  friendsBoard: () => call("GET", "/api/friends/leaderboard"),
 
   createPuzzle: (body) => call("POST", "/api/puzzles", body),
   myPuzzles: () => call("GET", "/api/puzzles/mine"),

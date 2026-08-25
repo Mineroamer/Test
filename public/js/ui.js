@@ -6,6 +6,8 @@
  * ever parsed as markup. Text goes in as text, always.
  */
 
+import { portrait } from "./character.js";
+
 /*
  * A plain object in the second position is properties; anything else - an
  * array, a node, a string - is the first child. Without that, `h("div", list)`
@@ -117,20 +119,14 @@ export function icon(name, size = 24) {
 
 /* -------------------------------------------------------------- people */
 
-export function avatar(person, size = 36) {
-  const hue = person && typeof person.colour === "number" ? person.colour : 200;
-  const initials = String(person && (person.display || person.handle) || "?")
-    .trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
-
-  return h("div.avatar", {
-    style: {
-      width: size + "px",
-      height: size + "px",
-      fontSize: Math.round(size * 0.36) + "px",
-      background: `hsl(${hue} 42% 42%)`,
-    },
-    "aria-hidden": "true",
-  }, initials);
+/*
+ * Somebody beside their name. Everyone with an account has a character now, so
+ * this hands off to the wardrobe; the initials underneath are still what a
+ * guest gets, and what the author of a puzzle shared before any of this
+ * existed gets.
+ */
+export function avatar(person, size = 36, options) {
+  return portrait(person, size, options);
 }
 
 /* ------------------------------------------------------------ messages */

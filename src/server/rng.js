@@ -70,10 +70,15 @@ function msUntilReset(now = new Date()) {
   return midnight - now;
 }
 
+/** The wall-clock moment the current puzzle day began, as a timestamp. */
+function startOfDay(now = new Date()) {
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+}
+
 /** The day number as YYYY-MM-DD, for anything a person will read. */
 function dayLabel(day) {
   const d = new Date(EPOCH + day * 86400000);
   return d.toISOString().slice(0, 10);
 }
 
-module.exports = { hashString, mulberry32, rngFor, pick, shuffle, sample, dayNumber, msUntilReset, dayLabel, EPOCH };
+module.exports = { hashString, mulberry32, rngFor, pick, shuffle, sample, dayNumber, msUntilReset, startOfDay, dayLabel, EPOCH };

@@ -19,7 +19,7 @@ export async function render() {
 async function paint(wrap) {
   const [data, board] = await Promise.all([
     api.friends(),
-    api.leaderboard().catch(() => ({ rows: [], you: null })),
+    api.friendsBoard().catch(() => ({ rows: [], you: null })),
   ]);
   const reload = () => paint(wrap);
 

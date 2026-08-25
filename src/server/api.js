@@ -20,9 +20,12 @@ const crypto = require("node:crypto");
 const auth = require("./auth.js");
 const limiter = require("./ratelimit.js");
 const stats = require("./stats.js");
+const progress = require("./progress.js");
+const cosmetics = require("./cosmetics.js");
+const xpRules = require("./xp.js");
 const games = require("./games/index.js");
 const { Router, fail } = require("./http.js");
-const { dayNumber, msUntilReset, dayLabel } = require("./rng.js");
+const { dayNumber, msUntilReset, startOfDay, dayLabel } = require("./rng.js");
 
 /* Recomputing a puzzle is cheap but not free - the Spelling Bee has to solve
  * itself - so the last few stay in memory. Runs hold seeds, not puzzles, so
@@ -99,6 +102,9 @@ function runView(store, run) {
       ? { title: custom.title, code: custom.code, by: displayFor(store, custom.authorId), note: custom.payload.note || "" }
       : null,
     summary: game.finished(run.state) ? game.summary(puzzle, run.state) : null,
+    /* What this round earned, set once by settle(). Absent for a guest, and
+     * absent until the round is actually over. */
+    earned: run.earned || null,
   };
 }
 
@@ -122,6 +128,21 @@ function settle(store, run, ctx) {
   const summary = game.summary(puzzle, run.state);
 
   if (ctx.user) {
+    /*
+     * XP is worked out before the round is logged, because the unlimited
+     * taper counts how many rounds of this game came earlier today - and this
+     * one is not earlier than itself.
+     */
+    run.earned = progress.award(store, ctx.user.id, {
+      game: run.game,
+      mode: run.mode,
+      difficulty: run.difficulty,
+      summary,
+      took: run.finishedAt - run.startedAt,
+      day: run.day,
+      startOfDay: startOfDay(),
+    });
+
     stats.record(store, ctx.user.id, {
       game: run.game,
       mode: run.mode,
@@ -208,6 +229,9 @@ function buildApi(store) {
     catalogue: games.CATALOGUE,
     difficulties: games.get("travle").DIFFICULTIES,
     progress: ctx.user ? stats.todayProgress(store, ctx.user.id, today()) : {},
+    /* The pass rides along with the session so the bar in the header is right
+     * on the first paint rather than popping in a moment later. */
+    pass: ctx.user ? progress.forUser(store, ctx.user.id) : null,
   }));
 
   router.post("/api/auth/signup", async (ctx) => {
@@ -540,6 +564,83 @@ function buildApi(store) {
 
     rows.sort((a, b) => b.wins - a.wins || b.streak - a.streak || a.hints - b.hints);
     return { rows, you: user.id };
+  });
+
+  /* ------------------------------------------------------------ the pass */
+
+  /*
+   * The numbers behind the pass, sent to the browser so the "how XP works"
+   * panel is the real formula rather than a description of it that can drift
+   * out of date. Nothing here is a secret: knowing that a Wordle in two is
+   * worth 87 does not help anyone guess the word.
+   */
+  const passRules = () => ({
+    levels: xpRules.LEVELS,
+    thresholds: xpRules.THRESHOLDS,
+    base: xpRules.BASE,
+    modeWeight: xpRules.MODE_WEIGHT,
+    freeRounds: xpRules.FREE_ROUNDS,
+    travleWeight: xpRules.TRAVLE_WEIGHT,
+    floor: xpRules.FLOOR,
+    lossShare: xpRules.LOSS_SHARE,
+    slots: cosmetics.SLOTS,
+    skins: cosmetics.SKINS,
+    rarities: cosmetics.RARITY,
+  });
+
+  /*
+   * Everything about one player's progression: level, XP, what is unlocked,
+   * and the whole fifty-tier track. It is one call because the pass screen
+   * wants all of it at once and none of it is expensive.
+   */
+  router.get("/api/pass", (ctx) => {
+    const user = requireUser(ctx);
+    return { pass: progress.forUser(store, user.id), rules: passRules() };
+  });
+
+  /* The wardrobe. Anything not unlocked is quietly swapped for the starter
+   * piece rather than refused - see cosmetics.sanitise for why. */
+  router.put("/api/pass/character", (ctx) => {
+    const user = requireUser(ctx);
+    const character = progress.equip(store, user.id, ctx.body && ctx.body.character);
+    return { character, pass: progress.forUser(store, user.id) };
+  });
+
+  /* "I have seen my new level." Stops the level-up card coming back forever. */
+  router.post("/api/pass/seen", (ctx) => {
+    const user = requireUser(ctx);
+    return { seenLevel: progress.markSeen(store, user.id) };
+  });
+
+  /*
+   * The universal board.
+   *
+   * No sign-in required to look: a club standings board that only members can
+   * see is a poster in a locked room. Signing in is what puts you *on* it.
+   */
+  router.get("/api/leaderboard", (ctx) => {
+    /* ctx.query is a URLSearchParams, so it is asked rather than indexed. */
+    const span = ctx.query && ctx.query.get("window") === "week" ? "week" : "all";
+    return progress.leaderboard(store, {
+      window: span,
+      limit: 100,
+      viewer: ctx.user ? ctx.user.id : null,
+    });
+  });
+
+  /* Somebody else's card, from the board or the friends list. */
+  router.get("/api/players/:handle", (ctx) => {
+    const found = auth.findByHandle(store, ctx.params.handle);
+    if (!found) fail(404, "No player by that name.");
+    const person = progress.publicFor(store, found.id);
+    const per = stats.forUser(store, found.id, today());
+    const daily = Object.values(per).filter((b) => b.mode === "daily");
+    return {
+      player: person,
+      played: Object.values(per).reduce((n, b) => n + b.played, 0),
+      won: Object.values(per).reduce((n, b) => n + b.won, 0),
+      bestStreak: daily.reduce((n, b) => Math.max(n, b.maxStreak), 0),
+    };
   });
 
   /* ----------------------------------------------------- custom puzzles */

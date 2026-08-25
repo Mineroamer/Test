@@ -111,10 +111,23 @@ export async function render({ game, mode, code }) {
 
   async function finish() {
     /* The home screen reads today's progress from the session, so refresh it
-     * once a round is over rather than leaving it stale. */
+     * once a round is over rather than leaving it stale. This also moves the
+     * level pip in the header, which is the point of refreshing it here. */
     if (state.user) refreshSession().catch(() => {});
     paintFooter();
     footer.scrollIntoView({ behavior: "smooth", block: "nearest" });
+
+    /*
+     * A level earned right now gets its card right now, over the result. Any
+     * other time - a level crossed in another tab, or on a device that then
+     * went to sleep - the pass screen shows it instead, so it is never simply
+     * missed. The import is lazy because most rounds do not level anyone up
+     * and the card is not worth loading until one does.
+     */
+    if (run.earned && run.earned.levelled) {
+      const mod = await import("./pass.js");
+      mod.levelUpSheet(run.earned.after, run.earned.unlocked);
+    }
   }
 
   /* --------------------------------------------------------- furniture */
@@ -186,6 +199,8 @@ export async function render({ game, mode, code }) {
 
       instance.outcome ? instance.outcome(run) : null,
 
+      earnedLine(),
+
       h("div.row.row-wrap", { style: { justifyContent: "center" } },
         h("button.primary", { onClick: showShare }, "Share"),
         run.mode === "daily"
@@ -197,6 +212,32 @@ export async function render({ game, mode, code }) {
         ? h("p.tiny.muted", { style: { margin: 0 } },
             h("a", { href: "#/signin/up" }, "Create an account"), " to keep your streaks and stats.")
         : null);
+  }
+
+  /*
+   * What the round was worth. Only for someone signed in - a guest earns
+   * nothing, and a row saying "0 XP" would be a worse answer than the line
+   * below it offering them an account.
+   */
+  function earnedLine() {
+    const got = run.earned;
+    if (!got) return null;
+
+    return h("div.earned", { "data-won": String(!!got.won) },
+      h("b", {}, `+${got.xp} XP`),
+      h("span.small.muted.grow", {}, why(got)),
+      h("a.btn.ghost.small", { href: "#/pass" }, `Level ${got.after}`));
+  }
+
+  function why(got) {
+    if (!got.won) return "for playing it out";
+    if (got.repeat) return "unlimited, and you have played this one a few times today";
+    if (run.mode === "unlimited") return "unlimited rounds are worth less than the daily";
+    if (run.mode === "custom") return "a shared puzzle";
+    if (got.quality >= 0.98) return "as well as it can be done";
+    if (got.quality >= 0.8) return "cleanly done";
+    if (got.quality >= 0.55) return "solved";
+    return "got there in the end";
   }
 
   function verdict(r, won) {

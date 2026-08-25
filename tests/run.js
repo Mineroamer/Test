@@ -21,6 +21,8 @@ process.env.DATA_FILE = STORE;
 
 const { server, store } = require("../server.js");
 const games = require("../src/server/games/index.js");
+const xpRules = require("../src/server/xp.js");
+const cosmeticTrack = require("../src/server/cosmetics.js");
 const { puzzleForRun } = require("../src/server/api.js");
 
 let base = "";
@@ -393,11 +395,35 @@ async function main() {
       assert.equal(puzzle.answers, null, "answers must not ship with the grid");
       assert.equal(puzzle.solution, null, "nor the filled grid");
 
-      /* No entry's answer should be recoverable from what was sent. */
       const real = answerTo(body.run.id);
-      const secret = real.entries[0].answer.toUpperCase();
-      assert.equal(JSON.stringify(puzzle).toUpperCase().includes(secret), false,
-        `${key} leaked an answer`);
+
+      /*
+       * Nothing sent may carry an answer.
+       *
+       * This used to scan the whole JSON for the first answer as a substring,
+       * which is not a test of anything: a three-letter answer turns up inside
+       * ordinary clue prose about a third of the time - NIM in "animal", FIN
+       * in "fine" - so it failed at random on correct code. What actually
+       * matters is structural, and it is checked structurally.
+       */
+      for (const entry of puzzle.entries) {
+        assert.equal("answer" in entry, false, `${key} sent an answer with a clue`);
+      }
+      /* `letters` is a string, one character per square: a space where nothing
+       * has been typed and # for a black square. Nothing else on a fresh grid. */
+      assert.equal(/[^ #]/.test(puzzle.letters), false,
+        `${key} started with letters already in it`);
+
+      /* And separately: a clue must not give away its own answer. That is a
+       * puzzle-quality question rather than a leak, and it needs word
+       * boundaries to mean anything. */
+      for (const answered of real.entries) {
+        const shown = puzzle.entries.find((e) =>
+          e.number === answered.number && e.direction === answered.direction);
+        if (!shown || !shown.clue) continue;
+        assert.equal(new RegExp(`\\b${answered.answer}\\b`, "i").test(shown.clue), false,
+          `${key}: the clue for ${answered.answer} contains it`);
+      }
     }
   });
 
@@ -892,6 +918,303 @@ async function main() {
     const guest = client();
     await guest("GET", "/api/me");
     assert.equal((await guest("POST", "/api/puzzles", { game: "wordle", payload: { answer: "ghost" } })).status, 401);
+  });
+
+  /* ---------------------------------------------------- xp and the pass */
+
+  console.log("\nxp and the pass");
+
+  await test("the curve pays for how well a round went, not that it happened", async () => {
+    const easy = xpRules.award({ game: "wordle", mode: "daily", summary: { won: true, guesses: 2, hints: 0 } });
+    const scrape = xpRules.award({ game: "wordle", mode: "daily", summary: { won: true, guesses: 6, hints: 0 } });
+    const lost = xpRules.award({ game: "wordle", mode: "daily", summary: { won: false, guesses: 6 } });
+
+    assert.ok(easy.xp > scrape.xp, "two guesses should beat six");
+    assert.ok(scrape.xp > lost.xp, "a scrappy win should beat a loss");
+    assert.ok(lost.xp > 0, "a loss should still be worth something");
+  });
+
+  await test("a hint costs, in every game that has one", async () => {
+    for (const [game, summary] of [
+      ["wordle", { won: true, guesses: 3 }],
+      ["connections", { won: true, mistakes: 1 }],
+      ["bee", { won: true, score: 90, maxScore: 100 }],
+      ["boxed", { won: true, guesses: 3 }],
+      ["travle", { won: true, over: 1, slack: 5 }],
+    ]) {
+      const clean = xpRules.award({ game, mode: "daily", summary: { ...summary, hints: 0 } });
+      const helped = xpRules.award({ game, mode: "daily", summary: { ...summary, hints: 2 } });
+      assert.ok(helped.xp < clean.xp, `${game}: hints should cost something`);
+    }
+  });
+
+  await test("a crossword solved by revealing is worth less than one solved", async () => {
+    const solved = xpRules.award({
+      game: "crossword", mode: "daily", took: 600000,
+      summary: { won: true, hints: 0, squares: 225, right: 225 },
+    });
+    const helped = xpRules.award({
+      game: "crossword", mode: "daily", took: 600000,
+      summary: { won: true, hints: 50, squares: 225, right: 225 },
+    });
+    assert.ok(helped.xp < solved.xp * 0.8);
+  });
+
+  await test("unlimited is worth less than the daily, and tapers", async () => {
+    const perfect = { won: true, guesses: 1, hints: 0 };
+    const daily = xpRules.award({ game: "wordle", mode: "daily", summary: perfect });
+    const first = xpRules.award({ game: "wordle", mode: "unlimited", summary: perfect, already: 0 });
+    const tenth = xpRules.award({ game: "wordle", mode: "unlimited", summary: perfect, already: 9 });
+
+    assert.ok(first.xp < daily.xp, "unlimited should not match the daily");
+    assert.ok(tenth.xp < first.xp / 2, "the tenth round of the day should have tapered hard");
+    assert.ok(tenth.xp >= 1, "it should never taper to nothing");
+  });
+
+  await test("Travle's levels are worth what they cost", async () => {
+    const at = (difficulty) => xpRules.award({
+      game: "travle", mode: "daily", difficulty,
+      summary: { won: true, over: 0, hints: 0, slack: 5 },
+    }).xp;
+    assert.ok(at("expert") > at("standard"), "expert should pay more than standard");
+    assert.ok(at("standard") > at("scenic"), "standard should pay more than scenic");
+  });
+
+  await test("the fifty levels climb and the last is the last", async () => {
+    assert.equal(xpRules.LEVELS, 50);
+    assert.equal(xpRules.levelFor(0), 1);
+    assert.equal(xpRules.levelFor(xpRules.THRESHOLDS[2]), 2);
+    assert.equal(xpRules.levelFor(xpRules.THRESHOLDS[50]), 50);
+    assert.equal(xpRules.levelFor(xpRules.THRESHOLDS[50] * 4), 50, "past the top stays at the top");
+
+    for (let level = 3; level <= 50; level += 1) {
+      const step = xpRules.THRESHOLDS[level] - xpRules.THRESHOLDS[level - 1];
+      const before = xpRules.THRESHOLDS[level - 1] - xpRules.THRESHOLDS[level - 2];
+      assert.ok(step > before, `level ${level} should cost more than the one before`);
+    }
+
+    const maxed = xpRules.progressFor(xpRules.THRESHOLDS[50] + 5000);
+    assert.equal(maxed.maxed, true);
+    assert.equal(maxed.share, 1, "a full bar past the end, not an overflowing one");
+  });
+
+  await test("every tier gives something and nothing is unreachable", async () => {
+    const byLevel = new Map();
+    for (const item of cosmeticTrack.ITEMS) {
+      byLevel.set(item.level, (byLevel.get(item.level) || 0) + 1);
+    }
+    for (let level = 1; level <= xpRules.LEVELS; level += 1) {
+      assert.ok(byLevel.get(level), `level ${level} unlocks nothing`);
+    }
+    /* One per tier, except the last, which finishes with the robes and the
+     * title together. A second doubled-up tier means an item was added
+     * without moving another, so this is worth holding. */
+    const doubled = [...byLevel.entries()].filter(([, n]) => n > 1).map(([l]) => l);
+    assert.deepEqual(doubled, [1, 50], "only the starter set and the last tier give more than one");
+
+    /* Every slot needs a level 1 piece, or a new player has an empty one. */
+    for (const slot of cosmeticTrack.SLOTS) {
+      assert.ok(cosmeticTrack.ITEMS.some((i) => i.slot === slot.key && i.level === 1),
+        `${slot.key} has nothing to start in`);
+    }
+  });
+
+  await test("every cosmetic can actually be drawn", async () => {
+    /* The wardrobe and the artwork are two files, and a name in one and not
+     * the other is an item that either cannot be worn or cannot be seen. */
+    const art = fs.readFileSync(path.join(__dirname, "..", "public", "js", "character.js"), "utf8");
+    const listed = (name) => {
+      const at = art.indexOf(`const ${name} = {`);
+      assert.notEqual(at, -1, `character.js has no ${name}`);
+      const body = art.slice(at, art.indexOf("\n};", at));
+      return [...body.matchAll(/^  ([a-z]+):/gm)].map((m) => m[1]);
+    };
+    const drawn = {
+      backdrop: listed("BACKDROPS"), outfit: listed("OUTFITS"), face: listed("FACES"),
+      head: listed("HEADS"), held: listed("HELD"), frame: listed("FRAMES"),
+    };
+
+    for (const item of cosmeticTrack.ITEMS) {
+      if (item.slot === "title") continue;   // a title is words, not a drawing
+      assert.ok(drawn[item.slot] && drawn[item.slot].includes(item.id),
+        `${item.slot}/${item.id} is on the track but nothing draws it`);
+    }
+    for (const [slot, ids] of Object.entries(drawn)) {
+      for (const id of ids) {
+        assert.ok(cosmeticTrack.find(slot, id), `${slot}/${id} is drawn but on no tier`);
+      }
+    }
+  });
+
+  await test("playing earns XP, and only for someone signed in", async () => {
+    const player = client();
+    await player("GET", "/api/me");
+    await player("POST", "/api/auth/signup", { handle: "xper", password: "earn me some xp" });
+
+    const before = await player("GET", "/api/pass");
+    assert.equal(before.body.pass.xp, 0);
+    assert.equal(before.body.pass.level, 1);
+
+    const run = await player("POST", "/api/play/wordle", { mode: "unlimited" });
+    const answer = answerTo(run.body.run.id).answer;
+    const done = await player("POST", `/api/runs/${run.body.run.id}/guess`, { value: answer });
+
+    assert.ok(done.body.run.earned, "a finished round should say what it earned");
+    assert.ok(done.body.run.earned.xp > 0);
+
+    const after = await player("GET", "/api/pass");
+    assert.equal(after.body.pass.xp, done.body.run.earned.xp);
+
+    /* A guest plays the same round and is given nothing to record. */
+    const guest = client();
+    await guest("GET", "/api/me");
+    const theirs = await guest("POST", "/api/play/wordle", { mode: "unlimited" });
+    const guestAnswer = answerTo(theirs.body.run.id).answer;
+    const over = await guest("POST", `/api/runs/${theirs.body.run.id}/guess`, { value: guestAnswer });
+    assert.equal(over.body.run.earned, null, "a guest has nowhere to put XP");
+    assert.equal((await guest("GET", "/api/pass")).status, 401);
+  });
+
+  await test("a finished round cannot be settled twice for XP", async () => {
+    const player = client();
+    await player("GET", "/api/me");
+    await player("POST", "/api/auth/signup", { handle: "twice", password: "count me once" });
+
+    const run = await player("POST", "/api/play/wordle", { mode: "unlimited" });
+    const answer = answerTo(run.body.run.id).answer;
+    await player("POST", `/api/runs/${run.body.run.id}/guess`, { value: answer });
+
+    const once = (await player("GET", "/api/pass")).body.pass.xp;
+    /* Re-reading a finished round, and trying to move in it again, must not
+     * pay out a second time. */
+    await player("GET", `/api/runs/${run.body.run.id}`);
+    await player("POST", `/api/runs/${run.body.run.id}/guess`, { value: answer });
+    assert.equal((await player("GET", "/api/pass")).body.pass.xp, once);
+  });
+
+  await test("you cannot wear what you have not unlocked", async () => {
+    const player = client();
+    await player("GET", "/api/me");
+    await player("POST", "/api/auth/signup", { handle: "dresser", password: "let me wear it" });
+
+    const asked = await player("PUT", "/api/pass/character", {
+      character: { outfit: "robes", head: "crown", frame: "wreath", backdrop: "aurora" },
+    });
+    assert.equal(asked.status, 200);
+    /* Quietly replaced with the starter piece rather than refused - see
+     * cosmetics.sanitise. What matters is that it is not worn. */
+    assert.equal(asked.body.character.outfit, "tee");
+    assert.equal(asked.body.character.head, "bare");
+    assert.equal(asked.body.character.frame, "none");
+  });
+
+  await test("skin and colour are free, and stick", async () => {
+    const player = client();
+    await player("GET", "/api/me");
+    await player("POST", "/api/auth/signup", { handle: "looker", password: "this is my face" });
+
+    const tone = cosmeticTrack.SKINS[4];
+    const set = await player("PUT", "/api/pass/character", { character: { skin: tone, hue: 128 } });
+    assert.equal(set.body.character.skin, tone);
+    assert.equal(set.body.character.hue, 128);
+
+    const me = await player("GET", "/api/me");
+    assert.equal(me.body.pass.character.skin, tone, "the session should carry it");
+  });
+
+  await test("a hue out of range is brought back into it", async () => {
+    const player = client();
+    await player("GET", "/api/me");
+    await player("POST", "/api/auth/signup", { handle: "hues", password: "spin the wheel" });
+
+    for (const [asked, wanted] of [[400, 40], [-30, 330], [720, 0]]) {
+      const set = await player("PUT", "/api/pass/character", { character: { hue: asked } });
+      assert.equal(set.body.character.hue, wanted, `hue ${asked}`);
+    }
+    const junk = await player("PUT", "/api/pass/character", { character: { hue: "purple" } });
+    assert.equal(typeof junk.body.character.hue, "number");
+  });
+
+  await test("the board ranks everyone, and a guest may look at it", async () => {
+    const stranger = client();
+    const { status, body } = await stranger("GET", "/api/leaderboard");
+    assert.equal(status, 200, "the board should not need an account to read");
+    assert.ok(body.rows.length >= 2);
+
+    for (let i = 1; i < body.rows.length; i += 1) {
+      assert.ok(body.rows[i - 1].xp >= body.rows[i].xp, "rows should descend by XP");
+      assert.equal(body.rows[i].rank, i + 1);
+    }
+  });
+
+  await test("the board gives away a name and a level, and nothing else", async () => {
+    const stranger = client();
+    const { body } = await stranger("GET", "/api/leaderboard");
+    const allowed = new Set([
+      "id", "handle", "display", "colour", "character", "title", "level", "xp", "week", "rounds", "rank",
+    ]);
+    for (const row of body.rows) {
+      for (const key of Object.keys(row)) {
+        assert.ok(allowed.has(key), `the board leaked ${key}`);
+      }
+    }
+    assert.equal(body.rows.some((r) => "passwordHash" in r || "salt" in r), false);
+    assert.equal(JSON.stringify(body).includes("passwordHash"), false);
+  });
+
+  await test("the weekly board counts only the last seven days", async () => {
+    const player = client();
+    await player("GET", "/api/me");
+    await player("POST", "/api/auth/signup", { handle: "lastweek", password: "long time ago" });
+
+    const run = await player("POST", "/api/play/wordle", { mode: "unlimited" });
+    await player("POST", `/api/runs/${run.body.run.id}/guess`, { value: answerTo(run.body.run.id).answer });
+
+    const me = (await player("GET", "/api/me")).body.user;
+    const row = store.data.progress[me.id];
+    const earned = row.xp;
+
+    /* Age the award out of the window and it should leave the weekly total
+     * while the all-time one keeps it. */
+    row.awards[0].at = Date.now() - 8 * 86400000;
+
+    const week = (await player("GET", "/api/leaderboard?window=week")).body;
+    const mine = week.rows.find((r) => r.handle === "lastweek");
+    assert.equal(mine.week, 0, "an eight-day-old round should not count this week");
+    assert.equal(mine.xp, earned, "but it should still count all time");
+  });
+
+  await test("a player card is public, a pass is not", async () => {
+    const stranger = client();
+    const card = await stranger("GET", "/api/players/xper");
+    assert.equal(card.status, 200);
+    assert.equal(card.body.player.handle, "xper");
+    assert.ok(typeof card.body.player.level === "number");
+    assert.equal(card.body.player.passwordHash, undefined);
+
+    assert.equal((await stranger("GET", "/api/players/nobody-at-all")).status, 404);
+    assert.equal((await stranger("GET", "/api/pass")).status, 401);
+    assert.equal((await stranger("PUT", "/api/pass/character", { character: {} })).status, 401);
+  });
+
+  await test("the level-up card is shown once", async () => {
+    const player = client();
+    await player("GET", "/api/me");
+    await player("POST", "/api/auth/signup", { handle: "riser", password: "up we go" });
+    const me = (await player("GET", "/api/me")).body.user;
+
+    /* Straight to level 5, the way a long evening would. */
+    store.data.progress[me.id] = store.data.progress[me.id] || {};
+    const row = store.data.progress[me.id];
+    row.xp = xpRules.THRESHOLDS[5];
+    row.level = 5;
+
+    const first = await player("GET", "/api/pass");
+    assert.equal(first.body.pass.pending, 1, "there are four levels it has not shown yet");
+
+    await player("POST", "/api/pass/seen");
+    const second = await player("GET", "/api/pass");
+    assert.equal(second.body.pass.pending, null, "and it should not come back");
   });
 
   /* ------------------------------------------------------- persistence */

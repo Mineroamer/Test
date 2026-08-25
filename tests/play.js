@@ -225,6 +225,38 @@ function peek(id) {
     assert.ok(body.totals.won >= 8, `expected wins, got ${body.totals.won}`);
   });
 
+  await test("a full sweep of the games moves you up the pass", async () => {
+    const { body } = await me("GET", "/api/pass");
+    const pass = body.pass;
+    const xp = require("../src/server/xp.js");
+
+    /*
+     * No magic total to assert against: most of these rounds are unlimited,
+     * which is deliberately worth a third of a daily, so any number written
+     * here would only be a note of what the suite happened to play. What is
+     * worth holding is that the books balance - the pass, the log of awards
+     * and the board must all agree, or one of them is lying.
+     */
+    const row = store.data.progress[Object.values(store.data.users)
+      .find((u) => u.handle === "player").id];
+    const logged = row.awards.reduce((n, a) => n + a.xp, 0);
+
+    assert.ok(pass.xp > 0, "a sweep of nine games earned nothing");
+    assert.equal(pass.xp, logged, "the pass and the log of awards disagree");
+    assert.equal(pass.level, xp.levelFor(pass.xp), "the level does not match the XP");
+    assert.ok(row.awards.length >= 9, `only ${row.awards.length} rounds were paid out`);
+    assert.equal(pass.track.length, 50);
+    assert.ok(pass.level >= 2, `still level ${pass.level} after playing everything`);
+    assert.ok(pass.unlocked.length > 7, "levelling up should have unlocked something new");
+
+    /* And it should be visible to everyone, which is the point of a board. */
+    const board = await me("GET", "/api/leaderboard");
+    const mine = board.body.rows.find((r) => r.handle === "player");
+    assert.ok(mine, "the player who just swept the board is not on it");
+    assert.equal(mine.xp, pass.xp);
+    assert.equal(mine.level, pass.level);
+  });
+
   console.log(`\n${results.passed} passed, ${results.failed} failed`);
   server.close();
   try { require("node:fs").unlinkSync(process.env.DATA_FILE); } catch { /* gone */ }

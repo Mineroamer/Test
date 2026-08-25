@@ -60,6 +60,18 @@
   --game-strands: #2f6f3f;
   --game-pips: #7a5bb5;
   --game-travle: #0b6e75;
+  /* Rarity, borrowed from every loot track ever made because everyone already
+     reads it: grey is ordinary, blue is good, purple is rare, gold is the one
+     you show people. */
+  --rare-common: #6c8280;
+  --rare-rare: #2c6fb5;
+  --rare-epic: #7a45b8;
+  --rare-legendary: #b07c0c;
+  --rare-common-wash: #e2eae9;
+  --rare-rare-wash: #d9e8f6;
+  --rare-epic-wash: #e8ddf6;
+  --rare-legendary-wash: #f7ead0;
+  --xp: #b07c0c;
   --game: var(--accent);
   --game-wash: var(--accent-wash);
 
@@ -121,6 +133,15 @@
     --game-strands: #6fc98a;
     --game-pips: #b49ae8;
     --game-travle: #45c2b9;
+    --rare-common: #93a9a7;
+    --rare-rare: #6bb0ec;
+    --rare-epic: #b795ea;
+    --rare-legendary: #e2b445;
+    --rare-common-wash: #1c2b2d;
+    --rare-rare-wash: #12293a;
+    --rare-epic-wash: #291d3c;
+    --rare-legendary-wash: #362a10;
+    --xp: #e2b445;
 
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.45), 0 8px 26px -16px rgba(0, 0, 0, 0.95);
     --shadow-lift: 0 2px 6px rgba(0, 0, 0, 0.55), 0 22px 48px -26px rgba(0, 0, 0, 1);
@@ -161,6 +182,15 @@
   --game-strands: #6fc98a;
   --game-pips: #b49ae8;
   --game-travle: #45c2b9;
+  --rare-common: #93a9a7;
+  --rare-rare: #6bb0ec;
+  --rare-epic: #b795ea;
+  --rare-legendary: #e2b445;
+  --rare-common-wash: #1c2b2d;
+  --rare-rare-wash: #12293a;
+  --rare-epic-wash: #291d3c;
+  --rare-legendary-wash: #362a10;
+  --xp: #e2b445;
 
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.45), 0 8px 26px -16px rgba(0, 0, 0, 0.95);
   --shadow-lift: 0 2px 6px rgba(0, 0, 0, 0.55), 0 22px 48px -26px rgba(0, 0, 0, 1);
@@ -265,10 +295,30 @@ header.bar {
 
 /* On a phone the bar has to hold a name, three sections, a theme switch and
  * an account. The name is the one thing the mark already says, so it goes. */
+/*
+ * The bar has five sections in it now, which is more than a phone can hold in
+ * a row. It scrolls sideways rather than wrapping or hiding: a hidden section
+ * is one people never find, and a wrapped bar pushes the board down the page
+ * on every screen.
+ */
+#nav {
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+#nav::-webkit-scrollbar { display: none; }
+#nav .btn { flex: none; }
+
 @media (max-width: 560px) {
   .wordmark span:not(.dot) { display: none; }
   header.bar { gap: 6px; padding: 10px 12px; }
   #nav .btn { padding: 5px 8px; }
+  /* The account button holds a name of up to thirty characters; at this width
+   * it gives way to the sections rather than pushing them off the end. */
+  #account-button {
+    max-width: 7ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
 }
 
 /* -------------------------------------------------------------- controls */
@@ -1010,3 +1060,308 @@ label.field > span { font-size: 0.82rem; font-weight: 600; color: var(--ink-soft
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* ===================================================================== *
+ * The pass, the wardrobe and the board.
+ *
+ * Rarity does the colour work throughout: every item, tier and reward reads
+ * its border and wash from --rare-*, so one data-rarity attribute is enough
+ * to place a thing on the ladder. Legendary is the only one that gets any
+ * motion, and only where it is already the subject.
+ * ===================================================================== */
+
+/* -------------------------------------------------------- level pip */
+
+.level-pip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 8px 4px 4px; border-radius: 999px;
+  background: var(--surface-sunk); border: 1px solid var(--rule);
+  text-decoration: none; color: var(--ink);
+  transition: background var(--fast) var(--ease), border-color var(--fast) var(--ease);
+}
+.level-pip:hover { background: var(--surface-raised); border-color: var(--rule-firm); }
+.level-pip b {
+  display: grid; place-items: center;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--game); color: var(--accent-ink);
+  font: 600 11px/1 var(--mono);
+}
+.pip-bar {
+  display: block; width: 40px; height: 4px; border-radius: 999px;
+  background: var(--rule); overflow: hidden;
+}
+.pip-fill {
+  display: block; height: 100%; border-radius: 999px; background: var(--xp);
+  transition: width var(--slow) var(--ease);
+}
+@media (max-width: 520px) { .pip-bar { display: none; } }
+
+/* ------------------------------------------------------------- pass */
+
+.pass-head {
+  display: grid; grid-template-columns: auto 1fr; gap: 16px; align-items: center;
+}
+@media (max-width: 460px) {
+  .pass-head { grid-template-columns: 1fr; justify-items: center; text-align: center; }
+}
+
+.pass-portrait { display: grid; place-items: center; }
+.pass-portrait .pc-character {
+  border-radius: var(--radius-lg);
+  filter: drop-shadow(0 6px 18px rgba(7, 22, 25, 0.18));
+}
+
+.level-line { display: flex; align-items: center; gap: 12px; }
+.level-badge {
+  display: grid; place-items: center; flex: none;
+  width: 40px; height: 40px; border-radius: 50%;
+  background: var(--game); color: var(--accent-ink);
+  font: 600 17px/1 var(--mono);
+}
+
+.xp-bar {
+  height: 10px; border-radius: 999px; overflow: hidden;
+  background: var(--surface-sunk); border: 1px solid var(--rule);
+}
+.xp-fill {
+  height: 100%; border-radius: 999px;
+  background: linear-gradient(90deg, var(--xp), color-mix(in srgb, var(--xp) 60%, var(--game)));
+  transition: width var(--slow) var(--ease);
+}
+
+/* ------------------------------------------------------- the wardrobe */
+
+.chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.wear {
+  font: 500 13px/1 var(--display);
+  padding: 8px 11px; border-radius: 999px;
+  border: 1px solid var(--rare-common);
+  background: var(--surface-raised); color: var(--ink);
+  cursor: pointer;
+  transition: transform var(--fast) var(--spring), background var(--fast) var(--ease),
+              border-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
+}
+.wear:hover { transform: translateY(-1px); }
+.wear[data-rarity="rare"] { border-color: var(--rare-rare); }
+.wear[data-rarity="epic"] { border-color: var(--rare-epic); }
+.wear[data-rarity="legendary"] { border-color: var(--rare-legendary); }
+
+.wear.on {
+  background: var(--rare-common-wash);
+  box-shadow: inset 0 0 0 1px var(--rare-common);
+  font-weight: 600;
+}
+.wear.on[data-rarity="rare"] { background: var(--rare-rare-wash); box-shadow: inset 0 0 0 1px var(--rare-rare); }
+.wear.on[data-rarity="epic"] { background: var(--rare-epic-wash); box-shadow: inset 0 0 0 1px var(--rare-epic); }
+.wear.on[data-rarity="legendary"] { background: var(--rare-legendary-wash); box-shadow: inset 0 0 0 1px var(--rare-legendary); }
+
+/* Locked things are shown, never hidden: seeing the next one is the point. */
+.wear.locked {
+  cursor: default; opacity: 0.55;
+  border-style: dashed; background: transparent;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+
+.swatch-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.swatch {
+  width: 34px; height: 34px; border-radius: 50%; padding: 0;
+  border: 2px solid var(--rule); cursor: pointer;
+  transition: transform var(--fast) var(--spring), border-color var(--fast) var(--ease);
+}
+.swatch:hover { transform: scale(1.08); }
+.swatch.on { border-color: var(--ink); transform: scale(1.08); }
+
+.hue {
+  width: 100%; height: 22px; padding: 0; border: 0; background: transparent;
+  -webkit-appearance: none; appearance: none; cursor: pointer;
+}
+.hue::-webkit-slider-runnable-track {
+  height: 10px; border-radius: 999px; border: 1px solid var(--rule);
+  background: linear-gradient(90deg,
+    hsl(0 58% 46%), hsl(60 58% 46%), hsl(120 58% 46%),
+    hsl(180 58% 46%), hsl(240 58% 46%), hsl(300 58% 46%), hsl(360 58% 46%));
+}
+.hue::-moz-range-track {
+  height: 10px; border-radius: 999px; border: 1px solid var(--rule);
+  background: linear-gradient(90deg,
+    hsl(0 58% 46%), hsl(60 58% 46%), hsl(120 58% 46%),
+    hsl(180 58% 46%), hsl(240 58% 46%), hsl(300 58% 46%), hsl(360 58% 46%));
+}
+.hue::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; margin-top: -5px;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: var(--surface-raised); border: 2px solid var(--ink);
+  box-shadow: var(--shadow);
+}
+.hue::-moz-range-thumb {
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--surface-raised); border: 2px solid var(--ink);
+}
+
+/* -------------------------------------------------------- the track */
+
+/*
+ * A strip you scroll sideways, so all fifty tiers are one gesture apart
+ * rather than a page of scrolling. Scroll snapping makes it settle on a tier
+ * instead of halfway between two.
+ */
+.tier-strip {
+  display: grid; grid-auto-flow: column; grid-auto-columns: 116px;
+  gap: 10px; overflow-x: auto; overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity; padding: 2px 2px 10px;
+  scrollbar-width: thin;
+}
+.tier-strip::-webkit-scrollbar { height: 8px; }
+.tier-strip::-webkit-scrollbar-thumb { background: var(--rule-firm); border-radius: 999px; }
+
+.tier {
+  scroll-snap-align: start;
+  display: grid; gap: 6px; justify-items: center; text-align: center;
+  /* Without this a tier with several rewards grows past its column and prints
+   * over its neighbours, which is exactly what the first version did. */
+  min-width: 0; overflow: hidden;
+  padding: 10px 8px; border-radius: var(--radius-lg);
+  border: 1px solid var(--rule); background: var(--surface-sunk);
+  opacity: 0.6;
+  transition: opacity var(--mid) var(--ease), border-color var(--mid) var(--ease),
+              background var(--mid) var(--ease);
+}
+.tier.reached {
+  opacity: 1; background: var(--surface-raised); border-color: var(--rule-firm);
+}
+.tier[data-milestone="true"] { border-color: var(--rare-legendary); }
+.tier[data-milestone="true"].reached {
+  background: var(--rare-legendary-wash);
+  box-shadow: inset 0 0 0 1px var(--rare-legendary);
+}
+
+.tier-no {
+  font: 600 12px/1 var(--mono); color: var(--muted);
+  padding: 3px 8px; border-radius: 999px; background: var(--surface);
+  border: 1px solid var(--rule);
+}
+.tier.reached .tier-no { color: var(--ink); background: var(--game); color: var(--accent-ink); border-color: transparent; }
+
+.tier-art {
+  display: flex; gap: 4px; align-items: center; justify-content: center;
+  min-height: 56px; max-width: 100%;
+}
+.tier-art > * { flex: none; }
+.tier:not(.reached) .tier-art { filter: grayscale(0.85); }
+.tier-art .pc-character { border-radius: 8px; }
+
+.tier-name {
+  font-size: 11px; line-height: 1.25; color: var(--ink-soft); min-height: 28px;
+  max-width: 100%; overflow-wrap: anywhere;
+}
+.tier-xp { font: 500 10px/1 var(--mono); color: var(--muted); }
+
+.tier-title {
+  display: grid; place-items: center; width: 56px; height: 56px;
+  border-radius: 8px; font-size: 10px; text-align: center; padding: 4px;
+  border: 1px dashed var(--rare-common); color: var(--rare-common);
+}
+.tier-title[data-rarity="rare"] { border-color: var(--rare-rare); color: var(--rare-rare); }
+.tier-title[data-rarity="epic"] { border-color: var(--rare-epic); color: var(--rare-epic); }
+.tier-title[data-rarity="legendary"] { border-color: var(--rare-legendary); color: var(--rare-legendary); }
+
+/* ------------------------------------------------------- levelling up */
+
+/* `.centre` only centres text; the burst is a grid item and needs telling. */
+.levelup { gap: 14px; justify-items: center; }
+.levelup > * { max-width: 100%; }
+.levelup .btn { justify-self: stretch; }
+.level-burst {
+  display: grid; place-items: center;
+  width: 88px; height: 88px; border-radius: 50%;
+  background: radial-gradient(circle at 50% 40%, var(--xp), color-mix(in srgb, var(--xp) 55%, var(--game)));
+  color: #fff; box-shadow: 0 0 0 0 color-mix(in srgb, var(--xp) 60%, transparent);
+  animation: burst var(--slow) var(--spring) both, halo 2.4s var(--ease-soft) 0.3s infinite;
+}
+.level-burst b { font: 700 34px/1 var(--mono); }
+
+@keyframes burst {
+  from { transform: scale(0.4) rotate(-12deg); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+@keyframes halo {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--xp) 55%, transparent); }
+  70% { box-shadow: 0 0 0 22px color-mix(in srgb, var(--xp) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--xp) 0%, transparent); }
+}
+
+.reward-row { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+.reward {
+  display: grid; gap: 4px; justify-items: center; text-align: center;
+  padding: 10px; border-radius: var(--radius-lg); min-width: 96px;
+  border: 1px solid var(--rare-common); background: var(--rare-common-wash);
+  animation: rise var(--slow) var(--spring) both;
+}
+.reward[data-rarity="rare"] { border-color: var(--rare-rare); background: var(--rare-rare-wash); }
+.reward[data-rarity="epic"] { border-color: var(--rare-epic); background: var(--rare-epic-wash); }
+.reward[data-rarity="legendary"] { border-color: var(--rare-legendary); background: var(--rare-legendary-wash); }
+.reward .label { text-transform: capitalize; }
+.reward-art .pc-character { border-radius: 8px; }
+
+@keyframes rise {
+  from { transform: translateY(10px) scale(0.94); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+
+/* --------------------------------------------------------- the board */
+
+.board-row {
+  display: grid; grid-template-columns: 30px auto 1fr auto;
+  align-items: center; gap: 12px;
+  padding: 10px 12px; border-radius: var(--radius-lg);
+  border: 1px solid var(--rule); background: var(--surface-raised);
+  cursor: pointer; text-align: left;
+  transition: transform var(--fast) var(--ease), border-color var(--fast) var(--ease),
+              box-shadow var(--fast) var(--ease);
+}
+.board-row:hover { transform: translateY(-1px); border-color: var(--rule-firm); box-shadow: var(--shadow); }
+.board-row:focus-visible { outline: 2px solid var(--game); outline-offset: 2px; }
+.board-row.you { border-color: var(--game); box-shadow: inset 0 0 0 1px var(--game); }
+
+.board-rank { font: 600 15px/1 var(--mono); color: var(--muted); text-align: right; }
+.board-row[data-medal="1"] .board-rank { color: var(--rare-legendary); }
+.board-row[data-medal="2"] .board-rank { color: var(--rare-common); }
+.board-row[data-medal="3"] .board-rank { color: #a4632c; }
+
+.board-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.board-score { text-align: right; }
+.board-score b { display: block; font: 600 16px/1.1 var(--mono); color: var(--ink); }
+.board-gap { text-align: center; color: var(--muted); letter-spacing: 4px; }
+
+.portrait { display: grid; place-items: center; flex: none; }
+.portrait .pc-character { border-radius: 8px; }
+
+/* ---------------------------------------------------- the rules sheet */
+
+.rule-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; }
+.rule {
+  display: grid; gap: 2px; justify-items: center; padding: 8px 6px;
+  border-radius: var(--radius); background: var(--surface-sunk); border: 1px solid var(--rule);
+}
+.rule b { font: 600 17px/1 var(--mono); }
+.rule .label { text-transform: capitalize; }
+
+ul.plain { margin: 0; padding-left: 18px; display: grid; gap: 6px; color: var(--ink-soft); }
+
+/* ------------------------------------------------- what a round earned */
+
+.earned {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 12px; border-radius: var(--radius-lg);
+  background: var(--surface-sunk); border: 1px solid var(--rule);
+  animation: rise var(--mid) var(--spring) both;
+}
+/* Gold is for a round you won. A round you lost still earns something, and
+   still says so, but it does not get a celebration. */
+.earned[data-won="true"] {
+  background: var(--rare-legendary-wash); border-color: var(--rare-legendary);
+}
+.earned b { font: 700 19px/1 var(--mono); color: var(--muted); }
+.earned[data-won="true"] b { color: var(--rare-legendary); }
+.earned .grow { flex: 1; }

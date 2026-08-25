@@ -16,7 +16,7 @@ export async function render() {
   const [puzzles, board] = state.user && !state.local
     ? await Promise.all([
         api.friendPuzzles().catch(() => ({ puzzles: [] })),
-        api.leaderboard().catch(() => ({ rows: [] })),
+        api.friendsBoard().catch(() => ({ rows: [] })),
       ])
     : [{ puzzles: [] }, { rows: [] }];
 
