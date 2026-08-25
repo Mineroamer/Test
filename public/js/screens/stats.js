@@ -40,7 +40,12 @@ function gameCard(game, all) {
   const daily = all[`${game.key}:daily`];
   const free = all[`${game.key}:unlimited`];
   const custom = all[`${game.key}:custom`];
-  if (!daily && !free && !custom) return null;
+  /* Travle keeps a separate record per daily level, so it has several. */
+  const levels = Object.entries(all)
+    .filter(([key, bucket]) => bucket.game === game.key && bucket.variant)
+    .sort((a, b) => a[0].localeCompare(b[0]));
+
+  if (!daily && !free && !custom && !levels.length) return null;
 
   return h("section.card.stack", {
     style: { "--game": `var(--game-${game.key})`, "--game-wash": `color-mix(in srgb, var(--game-${game.key}) 16%, var(--surface))` },
@@ -50,6 +55,8 @@ function gameCard(game, all) {
       h("h2", {}, game.name)),
 
     daily ? modeBlock("Daily", daily, true) : null,
+    ...levels.map(([, bucket]) =>
+      modeBlock(`Daily · ${bucket.variant}`, bucket, true)),
     free ? modeBlock("Unlimited", free, false) : null,
     custom ? modeBlock("Shared puzzles", custom, false) : null);
 }

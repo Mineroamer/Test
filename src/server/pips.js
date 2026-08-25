@@ -358,6 +358,21 @@ function build(seed, { squares = 12, maxRegion = 3, tries = 60 } = {}) {
       regions,
       dominoes: chosen.map(([a, b]) => [a, b]),
       solution: [...value].map(([key, n]) => [key, n]),
+      /*
+       * Which domino sits on which pair of squares.
+       *
+       * Kept rather than worked out again later. Cell-to-number alone does not
+       * say where one domino ends and the next begins, and inferring it by
+       * taking the first pair that fits each domino in turn goes wrong on
+       * about one board in twenty - an early choice strands a later domino
+       * with nowhere legal to go. Revealing the answer then showed a board
+       * with a piece missing.
+       */
+      layout: laid.map(([a, b], i) => ({
+        domino: i,
+        cells: [keyOf(a), keyOf(b)],
+        values: [value.get(keyOf(a)), value.get(keyOf(b))],
+      })),
       rows: Math.max(...cells.map((c) => c[0])) + 1,
       cols: Math.max(...cells.map((c) => c[1])) + 1,
     };

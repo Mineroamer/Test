@@ -478,6 +478,26 @@ async function main() {
     const real = answerTo(body.run.id);
     const { countSolutions } = require("../src/server/pips.js");
     assert.equal(countSolutions(real, 3), 1, "a dealt puzzle must have one answer");
+
+    /* And the layout, which says exactly where every domino goes, must stay
+     * on the server - it is the answer in its most usable form. */
+    assert.equal(puzzle.layout, undefined, "the layout must not be sent to the browser");
+    assert.equal(JSON.stringify(puzzle).includes("layout"), false);
+  });
+
+  await test("giving up on pips lays out the whole answer", async () => {
+    const { body } = await alice("POST", "/api/play/pips", { mode: "unlimited" });
+    const real = answerTo(body.run.id);
+    const { body: given } = await alice("POST", `/api/runs/${body.run.id}/reveal`, {});
+
+    assert.equal(given.run.puzzle.placed.length, real.dominoes.length,
+      "every domino should be on the board");
+    const answer = new Map(real.solution);
+    for (const one of given.run.puzzle.placed) {
+      one.cells.forEach((key, i) => {
+        assert.equal(one.values[i], answer.get(key), `${key} should show the right number`);
+      });
+    }
   });
 
   await test("pips refuses illegal placements", async () => {
@@ -501,29 +521,20 @@ async function main() {
     const real = answerTo(body.run.id);
     const answer = new Map(real.solution);
 
-    /* Work out where each domino belongs, then place them all. */
-    const placedCells = new Set();
-    const moves = [];
-    for (let index = 0; index < real.dominoes.length; index++) {
-      const [a, b] = real.dominoes[index];
-      let done = false;
-      for (const cell of real.cells) {
-        if (done) break;
-        const key = `${cell[0]},${cell[1]}`;
-        if (placedCells.has(key)) continue;
-        for (const [dr, dc] of [[0, 1], [1, 0]]) {
-          const other = `${cell[0] + dr},${cell[1] + dc}`;
-          if (!answer.has(other) || placedCells.has(other)) continue;
-          const wants = [answer.get(key), answer.get(other)];
-          if (!((wants[0] === a && wants[1] === b) || (wants[0] === b && wants[1] === a))) continue;
-          moves.push({ domino: index, cells: [cell, [cell[0] + dr, cell[1] + dc]], flip: wants[0] !== a });
-          placedCells.add(key);
-          placedCells.add(other);
-          done = true;
-          break;
-        }
-      }
-    }
+    /*
+     * The puzzle stores where each domino belongs. Working it back out from
+     * the cell values instead means guessing at the tiling, which strands a
+     * domino on about one board in twenty - that is what this test caught the
+     * first time, and it was a real fault in the game, not in the test.
+     */
+    const moves = real.layout.map((home) => {
+      const [a] = real.dominoes[home.domino];
+      return {
+        domino: home.domino,
+        cells: home.cells.map((key) => key.split(",").map(Number)),
+        flip: home.values[0] !== a,
+      };
+    });
     assert.equal(moves.length, real.dominoes.length, "every domino should have a home");
 
     let last = null;
@@ -594,6 +605,33 @@ async function main() {
     await alice("POST", `/api/runs/${body.run.id}/guess`, { value: puzzle.end });
     const again = await alice("GET", "/api/stats");
     assert.equal(again.body.games["travle:unlimited"].played, played);
+  });
+
+  await test("travle's daily levels keep separate streaks", async () => {
+    const walker = client();
+    await walker("GET", "/api/me");
+    await walker("POST", "/api/auth/signup", { handle: "walker", password: "a long walk indeed" });
+
+    /* Finish the Scenic daily, and only that one. */
+    const scenic = await walker("POST", "/api/play/travle", { mode: "daily", difficulty: "scenic" });
+    const puzzle = answerTo(scenic.body.run.id);
+    const route = games.get("travle").Engine.shortestRoute(puzzle.start, puzzle.end);
+    for (const code of route.slice(1)) {
+      await walker("POST", `/api/runs/${scenic.body.run.id}/guess`, { value: code });
+    }
+
+    const { body } = await walker("GET", "/api/stats");
+    assert.ok(body.games["travle:daily:scenic"], "scenic keeps its own record");
+    assert.equal(body.games["travle:daily:scenic"].won, 1);
+    assert.equal(body.games["travle:daily:standard"], undefined,
+      "finishing scenic must not touch standard");
+    assert.equal(body.games["travle:daily"], undefined,
+      "and nothing should land in a shared travle bucket");
+
+    /* The other level is still a fresh, unplayed round. */
+    const standard = await walker("POST", "/api/play/travle", { mode: "daily", difficulty: "standard" });
+    assert.equal(standard.body.run.puzzle.status, "playing");
+    assert.notEqual(standard.body.run.id, scenic.body.run.id);
   });
 
   await test("today's finished dailies are reported on the home screen", async () => {
@@ -766,18 +804,43 @@ async function main() {
     assert.equal(solved.body.result.correct, true);
   });
 
-  await test("a travle puzzle refuses an impossible walk", async () => {
-    const island = await alice("POST", "/api/puzzles", {
-      game: "travle", payload: { start: "Australia", end: "France" },
+  await test("a travle puzzle refuses a walk with nothing to work out", async () => {
+    /* Neighbours make no puzzle: there is one move and it is obvious. */
+    const tooClose = await alice("POST", "/api/puzzles", {
+      game: "travle", payload: { start: "Portugal", end: "Spain" },
     });
-    assert.equal(island.status, 400);
-    assert.match(island.body.error, /no land route/);
+    assert.equal(tooClose.status, 400);
+    assert.match(tooClose.body.error, /neighbours/);
+
+    const same = await alice("POST", "/api/puzzles", {
+      game: "travle", payload: { start: "Peru", end: "Peru" },
+    });
+    assert.equal(same.status, 400);
 
     const good = await alice("POST", "/api/puzzles", {
       game: "travle", payload: { start: "Portugal", end: "Poland" },
     });
     assert.equal(good.status, 200);
     assert.equal(good.body.puzzle.shape.from, "Portugal");
+  });
+
+  await test("every country can be walked to, islands included", async () => {
+    /* The sea crossings exist so that no country is a dead end. Australia was
+     * the one that prompted them; this checks the whole board, not just it. */
+    const { Engine } = games.get("travle");
+    const all = Object.keys(Engine.COUNTRIES);
+
+    const unreachable = all.filter((code) => !Number.isFinite(Engine.distance("AU", code)));
+    assert.deepEqual(unreachable, [], "everything should be reachable from Australia");
+
+    const stranded = all.filter((code) => Engine.neighbours(code).size === 0);
+    assert.deepEqual(stranded, [], "no country should have nowhere to go");
+
+    /* And a walk that used to be impossible is now a real puzzle. */
+    const made = await alice("POST", "/api/puzzles", {
+      game: "travle", payload: { start: "Australia", end: "France" },
+    });
+    assert.equal(made.status, 200);
   });
 
   await test("the bee has no puzzle builder", async () => {

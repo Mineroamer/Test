@@ -140,7 +140,11 @@ function settle(run) {
   run.recorded = true;
 
   const summary = game.summary(puzzleFor(run), run.state);
-  const key = `${run.game}:${run.mode}`;
+  /* Travle's three daily levels keep separate records, as they do on the
+   * server - they are three different walks, and a shared streak would be
+   * meaningless. */
+  const variant = run.game === "travle" && run.mode === "daily" ? run.difficulty : null;
+  const key = variant ? `${run.game}:${run.mode}:${variant}` : `${run.game}:${run.mode}`;
   const bucket = state.stats[key] || (state.stats[key] = {
     played: 0, won: 0, streak: 0, maxStreak: 0, lastDay: null,
     guesses: 0, hints: 0, timeMs: 0, distribution: {}, best: null,
@@ -200,9 +204,9 @@ function statsFor() {
   const today = dayNumber();
   const out = {};
   for (const [key, bucket] of Object.entries(state.stats)) {
-    const [game, mode] = key.split(":");
+    const [game, mode, variant] = key.split(":");
     out[key] = {
-      game, mode,
+      game, mode, variant: variant || null,
       played: bucket.played,
       won: bucket.won,
       winRate: bucket.played ? bucket.won / bucket.played : 0,

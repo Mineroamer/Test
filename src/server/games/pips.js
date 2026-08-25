@@ -118,94 +118,46 @@ function guess(puzzle, state, input) {
 }
 
 /*
- * A hint puts one domino where it belongs. It picks a domino that is not yet
- * in its right place, lifting whatever is sitting there.
+ * A hint puts one domino where it belongs, lifting whatever is in the way.
+ * Where "where it belongs" comes from the puzzle's stored layout, so a hint is
+ * always possible while anything is still out of place.
  */
 function hint(puzzle, state) {
   if (state.status !== "playing") return { ok: false, message: "This one is already done." };
 
-  const answer = new Map(puzzle.solution);
-  const placedRight = (one) =>
-    one.cells.every((key, i) => answer.get(key) === one.values[i]);
+  const isHome = (placed, home) =>
+    placed
+    && placed.cells.length === home.cells.length
+    && placed.cells.every((key, i) => key === home.cells[i] && placed.values[i] === home.values[i]);
 
-  /* Work out where each domino belongs in the answer. */
-  const spots = [];
-  for (let index = 0; index < puzzle.dominoes.length; index++) {
-    const [a, b] = puzzle.dominoes[index];
-    spots.push({ index, a, b });
-  }
+  const next = puzzle.layout.find((home) =>
+    !isHome(state.placed.find((one) => one.domino === home.domino), home));
 
-  const home = new Map();
-  for (const [key] of puzzle.solution) home.set(key, answer.get(key));
+  if (!next) return { ok: false, message: "Everything is already where it belongs." };
 
-  /* Find a domino whose correct squares are known and which is not there yet. */
-  for (const { index, a, b } of spots) {
-    const already = state.placed.find((one) => one.domino === index);
-    if (already && placedRight(already)) continue;
+  /* Clear the domino itself and anything sitting on its squares. */
+  state.placed = state.placed.filter((one) =>
+    one.domino !== next.domino && !one.cells.some((key) => next.cells.includes(key)));
 
-    /* Its home is the pair of adjacent squares holding its two numbers, not
-     * already correctly occupied by another domino. */
-    const settled = new Set(state.placed
-      .filter((one) => one.domino !== index && placedRight(one))
-      .flatMap((one) => one.cells));
+  state.placed.push({
+    domino: next.domino,
+    cells: next.cells.slice(),
+    values: next.values.slice(),
+  });
+  state.hints.push({ domino: next.domino, cells: next.cells.slice() });
 
-    for (const cell of puzzle.cells) {
-      const key = keyOf(cell);
-      if (settled.has(key)) continue;
-      for (const [dr, dc] of [[0, 1], [1, 0]]) {
-        const other = [cell[0] + dr, cell[1] + dc];
-        const otherKey = keyOf(other);
-        if (!onBoard(puzzle, otherKey) || settled.has(otherKey)) continue;
-
-        const wants = [home.get(key), home.get(otherKey)];
-        const matches = (wants[0] === a && wants[1] === b) || (wants[0] === b && wants[1] === a);
-        if (!matches) continue;
-
-        /* Clear anything in the way, then put it down. */
-        state.placed = state.placed.filter(
-          (one) => one.domino !== index && !one.cells.some((k) => k === key || k === otherKey));
-        state.placed.push({ domino: index, cells: [key, otherKey], values: wants });
-        state.hints.push({ domino: index, cells: [key, otherKey] });
-
-        if (isSolved(puzzle, state)) state.status = "won";
-        return { ok: true, hint: { domino: index, cells: [key, otherKey], values: wants }, status: state.status };
-      }
-    }
-  }
-  return { ok: false, message: "Everything is already where it belongs." };
+  if (isSolved(puzzle, state)) state.status = "won";
+  return { ok: true, hint: { domino: next.domino, cells: next.cells, values: next.values }, status: state.status };
 }
 
 /** Give up: lay the answer out. */
 function reveal(puzzle, state) {
   if (state.status !== "playing") return { ok: true, status: state.status };
-
-  const answer = new Map(puzzle.solution);
-  const placed = [];
-  const done = new Set();
-
-  for (let index = 0; index < puzzle.dominoes.length; index++) {
-    const [a, b] = puzzle.dominoes[index];
-    for (const cell of puzzle.cells) {
-      const key = keyOf(cell);
-      if (done.has(key)) continue;
-      for (const [dr, dc] of [[0, 1], [1, 0]]) {
-        const otherKey = keyOf([cell[0] + dr, cell[1] + dc]);
-        if (!onBoard(puzzle, otherKey) || done.has(otherKey)) continue;
-
-        const wants = [answer.get(key), answer.get(otherKey)];
-        const matches = (wants[0] === a && wants[1] === b) || (wants[0] === b && wants[1] === a);
-        if (!matches) continue;
-
-        placed.push({ domino: index, cells: [key, otherKey], values: wants });
-        done.add(key);
-        done.add(otherKey);
-        break;
-      }
-      if (done.has(key)) break;
-    }
-  }
-
-  state.placed = placed;
+  state.placed = puzzle.layout.map((one) => ({
+    domino: one.domino,
+    cells: one.cells.slice(),
+    values: one.values.slice(),
+  }));
   state.status = "done";
   return { ok: true, status: state.status };
 }

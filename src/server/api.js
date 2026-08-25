@@ -130,6 +130,9 @@ function settle(store, run, ctx) {
       startedAt: run.startedAt,
       finishedAt: run.finishedAt,
       custom: run.code || null,
+      /* Travle's daily levels each keep their own record; nothing else has
+       * more than one kind of round per mode. */
+      variant: run.game === "travle" && run.mode === "daily" ? run.difficulty : null,
     });
   }
 

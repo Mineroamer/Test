@@ -226,14 +226,96 @@ const COUNTRIES = {
  * between Russia and the United States, in either direction. It is stored
  * separately so the UI can flag it and so the border data stays factual.
  */
-const SPECIAL_LINKS = [
-  {
-    a: "RU",
-    b: "US",
-    label: "Bering Strait",
-    blurb: "House rule: Russia and the United States count as neighbours across the Bering Strait.",
-  },
-];
+const SPECIAL_LINKS = (function () {
+  /*
+   * Crossings by sea.
+   *
+   * The border data above is land only, which left forty countries - every
+   * island nation, Australia among them - with nowhere to walk and no way to
+   * be walked to. These put them back on the board.
+   *
+   * Each one is a real crossing with a real name, and short enough that a
+   * person would recognise it as the way across: Gibraltar is fourteen
+   * kilometres, Palk Strait thirty, Torres Strait about a hundred and fifty.
+   * The Pacific hops are longer because the Pacific is, and island-hopping is
+   * how those countries connect to anywhere at all.
+   *
+   * They are kept apart from `borders` for the same reason the Bering rule
+   * always was: the border data stays factual, and the house rules stay
+   * visible as house rules.
+   */
+  const crossings = [
+    ["RU", "US", "Bering Strait"],
+
+    /* Europe and the Mediterranean */
+    ["GB", "FR", "English Channel"],
+    /* No Irish Sea crossing: Ireland and the United Kingdom already share a
+     * real land border, so a house rule would be doing nothing. */
+    ["IS", "GB", "North Atlantic"],
+    ["ES", "MA", "Strait of Gibraltar"],
+    ["IT", "MT", "Malta Channel"],
+    ["IT", "TN", "Strait of Sicily"],
+    ["CY", "TR", "Eastern Mediterranean"],
+
+    /* Asia */
+    ["JP", "KR", "Korea Strait"],
+    ["TW", "CN", "Taiwan Strait"],
+    ["PH", "MY", "Balabac Strait"],
+    ["SG", "MY", "Johor Strait"],
+    ["LK", "IN", "Palk Strait"],
+    ["MV", "LK", "Laccadive Sea"],
+    ["BH", "SA", "King Fahd Causeway"],
+    ["ID", "AU", "Timor Sea"],
+
+    /* Australasia and the Pacific */
+    ["AU", "PG", "Torres Strait"],
+    ["NZ", "AU", "Tasman Sea"],
+    ["SB", "PG", "Solomon Sea"],
+    ["VU", "SB", "Coral Sea"],
+    ["FJ", "VU", "Koro Sea"],
+    ["TO", "FJ", "South Pacific"],
+    ["WS", "TO", "South Pacific"],
+    ["TV", "FJ", "South Pacific"],
+    ["KI", "TV", "Central Pacific"],
+    ["NR", "KI", "Central Pacific"],
+    ["MH", "KI", "Central Pacific"],
+    ["FM", "MH", "Caroline Islands"],
+    ["PW", "FM", "Philippine Sea"],
+
+    /* Africa and the Indian Ocean */
+    ["CV", "SN", "Atlantic crossing"],
+    ["ST", "GA", "Gulf of Guinea"],
+    ["MG", "MZ", "Mozambique Channel"],
+    ["KM", "MG", "Mozambique Channel"],
+    ["SC", "MG", "Indian Ocean"],
+    ["MU", "MG", "Indian Ocean"],
+
+    /* The Caribbean */
+    ["CU", "US", "Straits of Florida"],
+    ["BS", "CU", "Nicholas Channel"],
+    ["CU", "HT", "Windward Passage"],
+    ["JM", "CU", "Caribbean Sea"],
+    /* The Leeward Islands, which is what joins the Greater Antilles to the
+     * Lesser ones - without it Cuba and its neighbours are an island of their
+     * own, reachable from nowhere. */
+    ["DO", "KN", "Anegada Passage"],
+    ["TT", "VE", "Gulf of Paria"],
+    ["GD", "TT", "Lesser Antilles"],
+    ["VC", "GD", "Lesser Antilles"],
+    ["LC", "VC", "Lesser Antilles"],
+    ["BB", "VC", "Lesser Antilles"],
+    ["DM", "LC", "Lesser Antilles"],
+    ["AG", "DM", "Lesser Antilles"],
+    ["KN", "AG", "Lesser Antilles"],
+  ];
+
+  return crossings.map(([a, b, label]) => ({
+    a,
+    b,
+    label,
+    blurb: `House rule: ${a} and ${b} count as neighbours across the ${label}.`,
+  }));
+})();
 
 /* Alternative spellings, abbreviations and common misspellings. */
 const ALIASES = {

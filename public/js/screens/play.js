@@ -52,6 +52,12 @@ export async function render({ game, mode, code }) {
   const ctx = {
     get run() { return run; },
     say: (message, tone) => toast(toastSlot, message, tone),
+    /*
+     * Deal a fresh round of the same game, possibly with different options.
+     * Travle's difficulty tabs use it, and so does "another" - both want a new
+     * puzzle without leaving the screen.
+     */
+    restart: (options) => again(options),
     actions: {
       guess: (value) => send(() => api.guess(run.id, value)),
       hint: (at) => send(() => api.hint(run.id, at), { hint: true }),
@@ -134,6 +140,10 @@ export async function render({ game, mode, code }) {
   }
 
   function paintFooter() {
+    /* Travle brought its own controls and its own result panel across from the
+     * standalone game, so the harness stays out of its way. */
+    if (instance.ownFooter) return swap(footer);
+
     const over = finished(run);
     swap(footer,
       over ? result() : h("div.row.row-wrap", { style: { marginTop: "14px", justifyContent: "center" } },
@@ -212,19 +222,30 @@ export async function render({ game, mode, code }) {
       crossword: "letters", mini: "letters", strands: "words", pips: "dominoes" }[key] || "guesses";
   }
 
-  async function again() {
-    if (run.mode === "custom") return go("#/");
-    const answer = await api.play(run.game, { mode: run.mode, difficulty: run.difficulty });
+  async function again(options = {}) {
+    if (run.mode === "custom" && !options.mode) return go("#/");
+
+    const answer = await api.play(run.game, {
+      mode: options.mode || run.mode,
+      difficulty: options.difficulty || run.difficulty,
+    });
     run = answer.run;
+
     const fresh = view.create(ctx);
+    /* Replace every key, so a view that stopped offering `controls` on the
+     * last round does not keep the old one. */
+    for (const key of Object.keys(instance)) delete instance[key];
     Object.assign(instance, fresh);
+
     swap(board, fresh.el);
+    swap(root, header(), toastSlot, board, footer);
     paintFooter();
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function showShare() {
-    const text = shareText(run);
+    /* A game that arrived with its own way of writing this keeps it. */
+    const text = instance.shareText ? instance.shareText() : shareText(run);
     sheet("Share", (body, close) => {
       const status = h("p.small.muted", { style: { margin: 0 } }, "Nothing gives the answer away.");
       body.append(

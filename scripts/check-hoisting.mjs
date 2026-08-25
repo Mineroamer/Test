@@ -46,12 +46,65 @@ const calls = (text) => [...text.matchAll(/(^|[^\w.$'"`])([A-Za-z_$][\w$]*)\s*\(
 
 const problems = [];
 
+/*
+ * The worse cousin of the same mistake: a const or let written *after* the
+ * factory's `return`. Statements after a return never run at all, so such a
+ * binding stays in the temporal dead zone forever - not "not yet", but never.
+ * Function declarations in the same place are fine, because they hoist, which
+ * is exactly why the style works and exactly why the trap is easy to fall into.
+ *
+ * This is checked separately from reachability: it does not matter whether
+ * setup reaches it. Anything that touches it, ever, throws.
+ */
+function deadAfterReturn(file, lines) {
+  const found = [];
+
+  lines.forEach((line, start) => {
+    if (!/^(export )?(async )?function [A-Za-z0-9_$]+\s*\(/.test(line)) return;
+
+    /* Walk to the end of this function by brace depth. */
+    let depth = 0;
+    let end = lines.length - 1;
+    for (let i = start; i < lines.length; i++) {
+      depth += (lines[i].match(/\{/g) || []).length;
+      depth -= (lines[i].match(/\}/g) || []).length;
+      if (depth === 0 && i > start) { end = i; break; }
+    }
+
+    /* Its own `return` at one level of indentation. */
+    let returnAt = -1;
+    for (let i = start + 1; i < end; i++) {
+      if (/^ {2}return[\s;{]/.test(lines[i])) { returnAt = i; break; }
+    }
+    if (returnAt === -1) return;
+
+    for (let i = returnAt + 1; i < end; i++) {
+      const found2 = lines[i].match(/^ {2}(const|let)\s+([A-Za-z0-9_$]+)/);
+      if (found2) {
+        found.push(
+          `${path.relative(ROOT, file)}:${i + 1}  ${found2[2]} is declared after the return `
+          + `on line ${returnAt + 1}, so it is never initialised at all`
+        );
+      }
+    }
+  });
+  return found;
+}
+
 for (const file of walk(path.join(ROOT, "public", "js"))) {
-  /* The Travle engine and map came from elsewhere and are not written in this
-   * style, so they are not held to it. */
-  if (file.includes(path.join("games", "travle", ""))) continue;
+  /*
+   * The Travle engine and map came from elsewhere and are not written in this
+   * style, so they are not held to it.
+   *
+   * Matched on the directory, not a prefix: path.join("games", "travle", "")
+   * drops the trailing separator and yields "games/travle", which also matches
+   * games/travle.js - the view, which very much is held to this style, and was
+   * silently exempt until a real bug in it went unreported.
+   */
+  if (path.dirname(file).endsWith(path.join("games", "travle"))) continue;
 
   const lines = fs.readFileSync(file, "utf8").split("\n");
+  problems.push(...deadAfterReturn(file, lines));
 
   /* Helpers declared inside a factory, at one level of indentation. */
   const arrowAt = new Map();   // name -> line it becomes usable
@@ -110,7 +163,7 @@ for (const file of walk(path.join(ROOT, "public", "js"))) {
 }
 
 if (problems.length) {
-  console.error("Helpers used before they exist (this throws at runtime):\n");
+  console.error("Bindings that do not exist when they are used (this throws at runtime):\n");
   for (const problem of [...new Set(problems)]) console.error("  " + problem);
   console.error("\nMake them function declarations, which hoist.");
   process.exit(1);

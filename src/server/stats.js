@@ -15,7 +15,16 @@
 
 const LOG_PER_USER = 250;
 
-const keyFor = (game, mode) => `${game}:${mode}`;
+/*
+ * A record is kept per game and mode, and optionally per variant.
+ *
+ * The variant exists for Travle, whose three daily levels are three different
+ * walks rather than one walk at three settings - the game says so itself. Kept
+ * under one key they would share a streak, and finishing Scenic would quietly
+ * stamp the day for Standard too.
+ */
+const keyFor = (game, mode, variant) =>
+  (variant ? `${game}:${mode}:${variant}` : `${game}:${mode}`);
 
 const blank = () => ({
   played: 0,
@@ -30,9 +39,9 @@ const blank = () => ({
   best: null,      // fewest guesses in a win
 });
 
-function bucketFor(store, userId, game, mode) {
+function bucketFor(store, userId, game, mode, variant) {
   const all = store.data.stats[userId] || (store.data.stats[userId] = {});
-  const key = keyFor(game, mode);
+  const key = keyFor(game, mode, variant);
   return all[key] || (all[key] = blank());
 }
 
@@ -42,10 +51,10 @@ function bucketFor(store, userId, game, mode) {
  * `day` is only passed for daily rounds; it is what lets a streak tell the
  * difference between playing two days running and playing twice today.
  */
-function record(store, userId, { game, mode, day, summary, startedAt, finishedAt, custom }) {
+function record(store, userId, { game, mode, day, summary, startedAt, finishedAt, custom, variant }) {
   if (!userId) return null; // guests play, but nothing is written down
 
-  const bucket = bucketFor(store, userId, game, mode);
+  const bucket = bucketFor(store, userId, game, mode, variant);
   const took = Math.max(0, (finishedAt || Date.now()) - (startedAt || Date.now()));
 
   bucket.played += 1;
@@ -76,6 +85,7 @@ function record(store, userId, { game, mode, day, summary, startedAt, finishedAt
     userId,
     game,
     mode,
+    variant: variant || null,
     day: typeof day === "number" ? day : null,
     won: !!summary.won,
     guesses: summary.guesses || 0,
@@ -108,10 +118,11 @@ function forUser(store, userId, today) {
   const all = store.data.stats[userId] || {};
   const out = {};
   for (const [key, bucket] of Object.entries(all)) {
-    const [game, mode] = key.split(":");
+    const [game, mode, variant] = key.split(":");
     out[key] = {
       game,
       mode,
+      variant: variant || null,
       played: bucket.played,
       won: bucket.won,
       winRate: bucket.played ? bucket.won / bucket.played : 0,
