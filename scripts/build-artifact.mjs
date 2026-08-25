@@ -34,7 +34,7 @@ function buildData() {
   const stride = Math.max(1, Math.floor(beeAll.length / BEE_SETS_KEPT));
   const bee = beeAll.filter((_, i) => i % stride === 0).slice(0, BEE_SETS_KEPT);
 
-  const groups = read("data", "connections-groups.js")
+  const boards = read("data", "connections-boards.js")
     .replace(/^[\s\S]*?module\.exports\s*=\s*/, "")
     .replace(/;\s*$/, "");
 
@@ -47,7 +47,7 @@ PC.data = {
   boxedWords: ${read("data", "boxed-words.json")},
   crosswordClues: ${read("data", "crossword-clues.json")},
   strandsThemes: ${read("data", "strands-themes.js").replace(/^[\s\S]*?module\.exports\s*=\s*/, "").replace(/;\s*$/, "")},
-  connectionsGroups: ${groups}
+  connectionsBoards: ${boards}
 };`;
 }
 
@@ -91,7 +91,7 @@ function buildEngines() {
       dataFor("wordle-allowed.json", "wordleAllowed"),
     ]),
     connections: commonjsToExpression(read("src", "server", "games", "connections.js"), [
-      ['require(path.join(__dirname, "..", "..", "..", "data", "connections-groups.js"))', "PC.data.connectionsGroups"],
+      ['require(path.join(__dirname, "..", "..", "..", "data", "connections-boards.js"))', "PC.data.connectionsBoards"],
     ]),
     bee: commonjsToExpression(read("src", "server", "games", "spellingbee.js"), [
       dataFor("bee-words.json", "beeWords"),

@@ -4,48 +4,56 @@
  *
  * Sixteen words, four secret groups of four, four mistakes allowed.
  *
- * The dealer's one real job is making sure a puzzle has exactly one right
- * answer. Groups are drawn one per difficulty level, and any candidate that
- * shares a word with a group already chosen is passed over - so SNOW can be
- * weather in one puzzle and "SNOW ___" in another, but never both at once.
+ * The boards are written whole, in data/connections-boards.js, and dealt from
+ * there. Why they are not generated is explained at `deal` below; the short of
+ * it is that the interference between the four categories is the puzzle, and
+ * that cannot be assembled from categories written apart from each other.
  */
 
 const path = require("node:path");
 const { rngFor, shuffle, pick } = require("../rng.js");
 
-const GROUPS = require(path.join(__dirname, "..", "..", "..", "data", "connections-groups.js"));
+const BOARDS = require(path.join(__dirname, "..", "..", "..", "data", "connections-boards.js"));
 
-const LEVELS = [0, 1, 2, 3];
 const MISTAKES_ALLOWED = 4;
 
-/* Group indices bucketed by level, so a deal is four cheap picks. */
-const BY_LEVEL = LEVELS.map((level) => GROUPS.filter((g) => g.level === level));
-
-function deal(seed) {
+/**
+ * Deal a board.
+ *
+ * Boards are whole puzzles rather than four categories shuffled together,
+ * because in a real Connections the four categories are chosen *with* each
+ * other: five or six words seem to fit one theme, and that theme is the trap.
+ * Dealing unrelated categories cannot produce that however good each one is -
+ * every word simply announces where it belongs, and the puzzle becomes sorting
+ * rather than solving.
+ *
+ * The cost is that the library is finite where a generator would not be. That
+ * is the right way round: a hand-built board that misleads you is worth more
+ * than an endless supply of boards that cannot.
+ */
+function deal(board, seed) {
   const random = rngFor(seed);
-  const chosen = [];
-  const taken = new Set();
-
-  for (const level of LEVELS) {
-    const options = shuffle(BY_LEVEL[level], random);
-    const group = options.find((g) => g.words.every((w) => !taken.has(w)));
-    /* Every level has far more groups than there are ways to collide, so this
-     * only trips if the pool is edited down to almost nothing. */
-    if (!group) throw new Error(`connections: no group free at level ${level}`);
-    for (const w of group.words) taken.add(w);
-    chosen.push(group);
-  }
-
   return {
-    groups: chosen.map((g) => ({ clue: g.clue, words: g.words.slice(), level: g.level })),
+    groups: board.groups.map((group) => ({
+      clue: group.clue,
+      words: group.words.slice(),
+      level: group.level,
+    })),
     /* The grid order is fixed for the puzzle, so everyone sees the same board
      * and a shuffle in the browser is only ever cosmetic. */
-    order: shuffle(chosen.flatMap((g) => g.words), random),
+    order: shuffle(board.groups.flatMap((group) => group.words), random),
   };
 }
 
-const dailyPuzzle = (day) => deal("connections:daily:" + day);
-const randomPuzzle = (seed) => deal("connections:free:" + seed);
+/* Each day walks one step through the library, so consecutive days are never
+ * the same board and the whole set is seen before any of it comes round. */
+const dailyPuzzle = (day) =>
+  deal(BOARDS[((day % BOARDS.length) + BOARDS.length) % BOARDS.length], "connections:daily:" + day);
+
+const randomPuzzle = (seed) => {
+  const random = rngFor("connections:pick:" + seed);
+  return deal(BOARDS[Math.floor(random() * BOARDS.length)], "connections:free:" + seed);
+};
 
 function validateCustom(payload) {
   const errors = [];
@@ -199,7 +207,7 @@ module.exports = {
   key: "connections",
   name: "Connections",
   custom: true,
-  MISTAKES_ALLOWED, GROUPS,
+  MISTAKES_ALLOWED, BOARDS,
   dailyPuzzle, randomPuzzle, validateCustom, fromCustom,
   create, guess, hint, view, summary, finished,
 };

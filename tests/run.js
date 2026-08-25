@@ -266,6 +266,35 @@ async function main() {
     assert.equal(typeof hinted.result.hint.letter, "string");
   });
 
+  await test("every connections board is well formed", async () => {
+    /* The boards are hand-written, so what a test can protect is their shape:
+     * a board whose word appears in two of its own groups has two right
+     * answers, and a clue that contains one of its own answers gives it away.
+     * Both are easy to do by accident when editing content. */
+    const { BOARDS } = games.get("connections");
+    assert.ok(BOARDS.length >= 20, "the library should be worth cycling");
+
+    BOARDS.forEach((board, index) => {
+      const where = `board ${index}`;
+      const words = board.groups.flatMap((group) => group.words);
+
+      assert.equal(board.groups.length, 4, `${where}: needs four groups`);
+      assert.equal(words.length, 16, `${where}: needs sixteen words`);
+      assert.equal(new Set(words).size, 16, `${where}: a word appears twice`);
+      assert.deepEqual(board.groups.map((g) => g.level), [0, 1, 2, 3],
+        `${where}: levels should run easiest to hardest`);
+      assert.ok(board.trap, `${where}: should say what the misdirection is`);
+
+      for (const group of board.groups) {
+        assert.ok(group.clue, `${where}: a group has no clue`);
+        for (const word of group.words) {
+          assert.equal(group.clue.toUpperCase().includes(word), false,
+            `${where}: the clue "${group.clue}" contains its own answer ${word}`);
+        }
+      }
+    });
+  });
+
   await test("connections reports a near miss", async () => {
     const { body } = await alice("POST", "/api/play/connections", { mode: "unlimited" });
     const puzzle = answerTo(body.run.id);
