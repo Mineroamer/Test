@@ -69,6 +69,12 @@ export const api = {
   unfriend: (id) => call("DELETE", `/api/friends/${id}`),
   friendsBoard: () => call("GET", "/api/friends/leaderboard"),
 
+  /* Duels: one puzzle, two people, a clock. */
+  challenges: () => call("GET", "/api/challenges"),
+  challenge: (body) => call("POST", "/api/challenges", body),
+  declineChallenge: (id) => call("POST", `/api/challenges/${id}/decline`, {}),
+  challengeSeen: (id) => call("POST", `/api/challenges/${id}/seen`, {}),
+
   createPuzzle: (body) => call("POST", "/api/puzzles", body),
   myPuzzles: () => call("GET", "/api/puzzles/mine"),
   friendPuzzles: () => call("GET", "/api/puzzles/friends"),

@@ -140,6 +140,13 @@ const ITEMS = [
   { id: "tilewright", slot: "title", name: "Tilewright", rarity: "epic", earn: "pips:clean" },
   { id: "setter", slot: "title", name: "Puzzle Setter", rarity: "epic", earn: "club:shared" },
   { id: "allrounder", slot: "title", name: "All-Rounder", rarity: "legendary", earn: "club:everything" },
+
+  /* Won off somebody else. These are the only pieces in the club that need a
+   * second person, which is exactly what makes them worth wearing. */
+  { id: "fencer", slot: "head", name: "Duelling Mask", rarity: "legendary", earn: "duel:ten" },
+  { id: "gauntlet", slot: "held", name: "Thrown Gauntlet", rarity: "epic", earn: "duel:first" },
+  { id: "duellist", slot: "title", name: "Duellist", rarity: "epic", earn: "duel:margin" },
+  { id: "unbeaten", slot: "title", name: "Unbeaten", rarity: "legendary", earn: "duel:shutout" },
 ];
 
 /*

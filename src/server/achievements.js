@@ -391,6 +391,59 @@ const ACHIEVEMENTS = [
     cosmetic: { slot: "title", id: "setter" },
     check: (r) => r.solvesOfMine > 0,
   },
+
+  /*
+   * ------------------------------------------------------------------ duels
+   *
+   * These are checked when a duel is settled, not when a round finishes -
+   * `when: "duel"` says so. It has to work that way: whether you won a duel
+   * is not known when you put your own puzzle down, only once the other
+   * person has put theirs down too.
+   */
+  {
+    id: "duel:first",
+    when: "duel",
+    game: null,
+    name: "First Blood",
+    blurb: "Beat a friend to a puzzle.",
+    xp: 200,
+    rarity: "rare",
+    cosmetic: { slot: "held", id: "gauntlet" },
+    check: (r) => r.duelsWon >= 1,
+  },
+  {
+    id: "duel:ten",
+    when: "duel",
+    game: null,
+    name: "Ten Times Over",
+    blurb: "Win ten duels.",
+    xp: 700,
+    rarity: "legendary",
+    cosmetic: { slot: "head", id: "fencer" },
+    check: (r) => r.duelsWon >= 10,
+  },
+  {
+    id: "duel:margin",
+    when: "duel",
+    game: null,
+    name: "Not Close",
+    blurb: "Win a duel by a clear two minutes.",
+    xp: 400,
+    rarity: "epic",
+    cosmetic: { slot: "title", id: "duellist" },
+    check: (r) => r.duelMargin >= 120000,
+  },
+  {
+    id: "duel:shutout",
+    when: "duel",
+    game: null,
+    name: "Unbeaten",
+    blurb: "Solve a duel your opponent could not.",
+    xp: 300,
+    rarity: "legendary",
+    cosmetic: { slot: "title", id: "unbeaten" },
+    check: (r) => r.duelShutouts >= 1,
+  },
 ];
 
 const BY_ID = new Map(ACHIEVEMENTS.map((one) => [one.id, one]));
@@ -413,13 +466,21 @@ const COSMETIC_FOR = new Map(
  * throws is treated as not earned rather than allowed to take the round down
  * with it - an achievement is a garnish, and a bad one must not cost somebody
  * the puzzle they just finished.
+ *
+ * `round.kind` says what kind of moment this is: a finished round by default,
+ * or "duel" when a challenge has just been settled. The two are kept apart
+ * rather than sharing one bag of fields, because a duel result has no summary
+ * and a round has no opponent, and a check written for one would be reading
+ * undefined out of the other.
  */
 function earnedBy(round, already = []) {
   const has = new Set(already);
   const won = [];
+  const kind = round.kind || "round";
 
   for (const one of ACHIEVEMENTS) {
     if (has.has(one.id)) continue;
+    if ((one.when || "round") !== kind) continue;
     if (one.game && one.game !== round.game) continue;
     try {
       if (one.check(round)) won.push(one);

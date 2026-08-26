@@ -199,6 +199,15 @@ export async function copy(text) {
 export const plural = (n, one, many) => `${n} ${n === 1 ? one : many || one + "s"}`;
 
 export function duration(ms) {
+  /*
+   * Tenths under ten seconds.
+   *
+   * Duels are decided on the clock, and a Wordle solved on the first guess
+   * takes well under a second - so whole seconds turned a race into "0s
+   * against 0s", which says nothing about who was faster. Above ten seconds
+   * the tenth is noise and is dropped.
+   */
+  if (ms < 10000) return `${Math.max(0, Math.round(ms / 100) / 10)}s`;
   const total = Math.round(ms / 1000);
   if (total < 60) return `${total}s`;
   const mins = Math.floor(total / 60);

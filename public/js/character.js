@@ -333,6 +333,20 @@ const HEADS = {
     <circle cx="30" cy="12" r="4.6" fill="hsl(44 92% 58%)" stroke="#2a2622" stroke-width="1.6"/>
     <circle cx="70" cy="12" r="4.6" fill="hsl(44 92% 58%)" stroke="#2a2622" stroke-width="1.6"/>`,
 
+  /* Earned by winning ten duels. The mesh is drawn rather than hatched with a
+   * pattern, because a pattern would need an id and two of these on one screen
+   * would then share it. */
+  fencer: () => `
+    <path d="M30 30q20 -12 40 0v18q0 16 -20 20T30 48z" fill="hsl(215 14% 78%)"
+          stroke="hsl(215 18% 44%)" stroke-width="2"/>
+    <path d="M34 32q16 -9 32 0v16q0 12 -16 16T34 48z" fill="hsl(215 16% 88%)" opacity="0.55"/>
+    <g stroke="hsl(215 18% 50%)" stroke-width="0.8" opacity="0.75">
+      ${[36, 41, 46, 51, 56, 61, 66].map((x) => `<path d="M${x} 29v36"/>`).join("")}
+      ${[34, 40, 46, 52, 58].map((y) => `<path d="M31 ${y}h38"/>`).join("")}
+    </g>
+    <path d="M30 30q20 -12 40 0" fill="none" stroke="hsl(215 20% 38%)" stroke-width="3"/>
+    <path d="M38 66h24l-2 5H40z" fill="hsl(352 48% 46%)"/>`,
+
   crown: () => `
     <path d="M28 34 33 15l8 10 9-13 9 13 8-10 5 19z" fill="hsl(46 90% 58%)"/>
     <rect x="28" y="32" width="44" height="9" rx="2.5" fill="hsl(42 80% 44%)"/>
@@ -403,6 +417,16 @@ const HELD = {
     <rect x="74" y="67" width="8" height="4" rx="1.4" fill="hsl(215 18% 32%)"/>
     <path d="M78 82V75M78 82l5 3" stroke="hsl(352 62% 50%)" stroke-width="2" stroke-linecap="round"/>
     <circle cx="78" cy="82" r="1.4" fill="hsl(215 18% 32%)"/>`,
+
+  /* Earned by beating a friend to a puzzle. Thrown, so it lies open. */
+  gauntlet: () => `
+    <g transform="rotate(-20 78 82)">
+      <path d="M71 72h14v18a4 4 0 0 1-4 4h-6a4 4 0 0 1-4-4z" fill="hsl(215 14% 74%)"
+            stroke="hsl(215 20% 44%)" stroke-width="1.6"/>
+      <path d="M71 76h14M71 81h14M71 86h14" stroke="hsl(215 20% 50%)" stroke-width="1.2"/>
+      <path d="M69 68h18v5H69z" fill="hsl(215 18% 56%)" stroke="hsl(215 22% 38%)" stroke-width="1.4"/>
+      <path d="M74 94v4M80 94v4" stroke="hsl(215 20% 44%)" stroke-width="2.4" stroke-linecap="round"/>
+    </g>`,
 
   /* Earned by finding every theme word with the lights off. */
   torch: () => `

@@ -27,6 +27,7 @@ const EMPTY = () => ({
   stats: {},         // userId -> { "game:mode" -> tallies }
   progress: {},      // userId -> { xp, level, character, awards } - the pass
   puzzles: {},       // share code -> a puzzle somebody built
+  challenges: [],    // head-to-head duels: one puzzle, two players, a clock
 });
 
 class Store {

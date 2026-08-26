@@ -128,8 +128,28 @@ function crosswordQuality({ hints, squares, right }, took) {
  * mode people play most is a system nobody believes in, but it pays a third
  * and it tapers. Custom puzzles pay least: their difficulty is whatever their
  * author felt like, so they cannot be worth the same as a dealt one.
+ *
+ * A challenge sits between the two. It is a dealt puzzle, played once, and
+ * somebody is watching - but you can send as many as you have friends, so it
+ * cannot be worth a daily either. Half, and the win bonus below carries the
+ * rest of it.
  */
-const MODE_WEIGHT = { daily: 1, unlimited: 0.35, custom: 0.22 };
+const MODE_WEIGHT = { daily: 1, unlimited: 0.35, custom: 0.22, challenge: 0.5 };
+
+/*
+ * Winning a duel, on top of what the round itself paid.
+ *
+ * It is a flat number rather than a share of the round because the thing being
+ * rewarded is not how well you played - the round already paid for that - but
+ * that you beat somebody. A narrow win over a good player and a runaway win
+ * over a distracted one are the same achievement from where the loser sits.
+ *
+ * The loser is paid too, and not nothing. A duel where losing costs you
+ * something is a duel people stop accepting.
+ */
+const DUEL_WIN = 150;
+const DUEL_DRAW = 90;
+const DUEL_LOSS = 40;
 
 /* How many rounds of one game, in one day, pay their full unlimited rate. */
 const FREE_ROUNDS = 3;
@@ -157,8 +177,12 @@ const TRAVLE_WEIGHT = { scenic: 0.9, standard: 1, expert: 1.25, unlimited: 1 };
  */
 function award({ game, mode, difficulty, summary, took, already = 0 }) {
   const base = BASE[game] || 100;
+  /* The taper is there to stop one game being farmed all evening. A daily can
+   * only be played once, and a challenge needs somebody to accept it, so
+   * neither can be farmed and neither is tapered. */
+  const once = mode === "daily" || mode === "challenge";
   const weight = (MODE_WEIGHT[mode] === undefined ? MODE_WEIGHT.unlimited : MODE_WEIGHT[mode])
-    * (mode === "daily" ? 1 : taper(already));
+    * (once ? 1 : taper(already));
 
   const level = game === "travle" ? (TRAVLE_WEIGHT[difficulty] || 1) : 1;
 
@@ -242,7 +266,16 @@ function progressFor(xp) {
   };
 }
 
+/** What the end of a duel is worth to one of the two people in it. */
+function duelXp(outcome) {
+  if (outcome === "won") return DUEL_WIN;
+  if (outcome === "drew") return DUEL_DRAW;
+  if (outcome === "lost") return DUEL_LOSS;
+  return 0;                                   // never turned up
+}
+
 module.exports = {
   BASE, FLOOR, LEVELS, LOSS_SHARE, MODE_WEIGHT, FREE_ROUNDS, TRAVLE_WEIGHT, THRESHOLDS, TOTAL_XP,
-  between, taper, costOf, award, levelFor, progressFor,
+  DUEL_WIN, DUEL_DRAW, DUEL_LOSS,
+  between, taper, costOf, award, levelFor, progressFor, duelXp,
 };

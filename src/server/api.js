@@ -21,6 +21,7 @@ const auth = require("./auth.js");
 const limiter = require("./ratelimit.js");
 const stats = require("./stats.js");
 const progress = require("./progress.js");
+const duels = require("./challenges.js");
 const cosmetics = require("./cosmetics.js");
 const achievements = require("./achievements.js");
 const xpRules = require("./xp.js");
@@ -77,6 +78,9 @@ function puzzleForRun(store, run) {
     return cached(`daily:${run.game}:${run.day}:${run.difficulty || ""}`, () =>
       games.puzzleFor(game, "daily", { day: run.day, difficulty: run.difficulty }));
   }
+  /* A challenge is an unlimited puzzle whose seed came from the duel rather
+   * than from this player, which is the whole trick: both sides build the
+   * same board from the same eight bytes and neither has to be sent it. */
   return cached(`free:${run.game}:${run.seed}:${run.difficulty || ""}`, () =>
     games.puzzleFor(game, "unlimited", { seed: run.seed, difficulty: run.difficulty }));
 }
@@ -106,6 +110,58 @@ function runView(store, run) {
     /* What this round earned, set once by settle(). Absent for a guest, and
      * absent until the round is actually over. */
     earned: run.earned || null,
+    /* If this round is one half of a duel, who it is against and how it
+     * stands. Null for every ordinary round. */
+    challenge: run.challenge ? duelView(store, duels.find(store, run.challenge), run.owner) : null,
+  };
+}
+
+/* --------------------------------------------------------------- duels */
+
+/**
+ * One duel, as the person looking at it is allowed to see it.
+ *
+ * Their opponent's time is shown as soon as the opponent has finished, and
+ * that is deliberate: "beat 1:42" is a better thing to be told than "somebody
+ * has played this". Nothing about the puzzle itself is revealed either way -
+ * a stopwatch reading is not a clue.
+ */
+function duelView(store, challenge, userId) {
+  if (!challenge) return null;
+  const otherId = duels.opponentOf(challenge, userId);
+  const mine = challenge.results[userId] || null;
+  const theirs = challenge.results[otherId] || null;
+  const game = games.get(challenge.game);
+
+  const outcome = !challenge.settledAt ? null
+    : !mine ? "missed"
+    : challenge.winner === userId ? "won"
+    : challenge.winner ? "lost"
+    : "drew";
+
+  return {
+    id: challenge.id,
+    game: challenge.game,
+    gameName: game ? game.name : challenge.game,
+    difficulty: challenge.difficulty,
+    /* Who sent it, so the list can say "you challenged" or "challenged you". */
+    yours: challenge.from === userId,
+    opponent: progress.publicFor(store, otherId),
+    createdAt: challenge.createdAt,
+    expiresAt: challenge.expiresAt,
+    mine,
+    theirs,
+    open: duels.isWaitingOn(challenge, userId),
+    settled: !!challenge.settledAt,
+    expired: !!challenge.expired,
+    declined: challenge.declined ? { by: challenge.declined.by, at: challenge.declined.at } : null,
+    outcome,
+    standing: duels.standing(store, userId, otherId),
+    /* The XP the end of the duel paid this player, kept on the duel because
+     * it is usually settled while they are not looking. */
+    earned: (challenge.earned && challenge.earned[userId]) || null,
+    /* Whether this player has been shown how it ended. */
+    seen: !!(challenge.seen && challenge.seen[userId]),
   };
 }
 
@@ -200,7 +256,67 @@ function settle(store, run, ctx) {
     record.plays = (record.plays || 0) + 1;
     if (summary.won) record.solves = (record.solves || 0) + 1;
   }
+
+  /*
+   * And if it was half of a duel, write the time down. A guest cannot be in
+   * one - a duel is between two accounts - so this only ever runs for a
+   * signed-in player.
+   */
+  if (run.challenge && ctx.user) {
+    const challenge = duels.find(store, run.challenge);
+    if (challenge) {
+      duels.recordResult(store, challenge, ctx.user.id, {
+        won: !!summary.won,
+        took: run.finishedAt - run.startedAt,
+        guesses: summary.guesses || 0,
+        hints: summary.hints || 0,
+      });
+      payOut(store, challenge);
+    }
+  }
   store.touch();
+}
+
+/**
+ * Pay both sides of a settled duel, once.
+ *
+ * The person who played first is usually not there when it settles, which is
+ * why the payout is written onto the duel rather than handed to whoever
+ * happened to trigger it. Their screen picks it up the next time they look.
+ */
+function payOut(store, challenge) {
+  if (!challenge.settledAt || challenge.earned) return challenge;
+  if (challenge.declined) { challenge.earned = {}; return challenge; }
+
+  challenge.earned = {};
+  for (const userId of challenge.players) {
+    if (!store.data.users[userId]) continue;
+    const mine = challenge.results[userId];
+    const outcome = !mine ? "missed"
+      : challenge.winner === userId ? "won"
+      : challenge.winner ? "lost"
+      : "drew";
+
+    challenge.earned[userId] = progress.duel(store, userId, {
+      outcome,
+      /* Counted after the duel is settled, so the tenth win is the tenth. */
+      record: duels.recordOf(store, userId),
+    });
+  }
+  store.touch();
+  return challenge;
+}
+
+/*
+ * Settle and pay every duel that has run out of time.
+ *
+ * There is no scheduler here, so this runs when somebody opens their list.
+ * It sweeps everybody's, not just theirs: a duel that expired is decided
+ * whether or not either player is the one who came looking, and doing it in
+ * one pass keeps the outcome from depending on who logged in first.
+ */
+function sweepDuels(store) {
+  for (const challenge of duels.sweep(store)) payOut(store, challenge);
 }
 
 /*
@@ -281,6 +397,10 @@ function buildApi(store) {
     /* The pass rides along with the session so the bar in the header is right
      * on the first paint rather than popping in a moment later. */
     pass: ctx.user ? progress.forUser(store, ctx.user.id) : null,
+    /* Two numbers for the badge on the Friends tab: people waiting to be let
+     * in, and duels waiting to be played. Counted here rather than fetched
+     * separately, so the badge is right on the first paint. */
+    waiting: ctx.user ? waitingFor(ctx.user.id) : null,
   }));
 
   router.post("/api/auth/signup", async (ctx) => {
@@ -371,7 +491,10 @@ function buildApi(store) {
     const game = games.get(ctx.params.game);
     if (!game) fail(404, "No such game.");
 
-    const mode = ctx.body.mode === "daily" ? "daily" : ctx.body.mode === "custom" ? "custom" : "unlimited";
+    const mode = ctx.body.mode === "daily" ? "daily"
+      : ctx.body.mode === "custom" ? "custom"
+      : ctx.body.mode === "challenge" ? "challenge"
+      : "unlimited";
     const owner = ctx.user ? ctx.user.id : "guest:" + ctx.token;
     const difficulty = game.key === "travle" && ctx.body.difficulty
       ? String(ctx.body.difficulty) : undefined;
@@ -392,6 +515,37 @@ function buildApi(store) {
       /* A shared puzzle is a one-off, like a daily: your attempt at it stands. */
       run = existingRun(store, ctx, { game: game.key, mode: "custom", code });
       if (!run) run = newRun({ game: game.key, mode, owner, code, difficulty: record.payload.difficulty });
+    } else if (mode === "challenge") {
+      const user = requireUser(ctx);
+      const challenge = duels.find(store, String(ctx.body.challenge || ""));
+
+      if (!challenge) fail(404, "That challenge is no longer there.");
+      if (!duels.isPlayer(challenge, user.id)) fail(403, "That challenge is not yours.");
+      if (challenge.game !== game.key) fail(400, "That challenge is for a different game.");
+      if (challenge.declined) fail(410, "That challenge was turned down.");
+      /*
+       * Your attempt at a duel stands, exactly like a daily: the round you
+       * played comes back rather than a second go at the same board.
+       */
+      run = existingRun(store, ctx, { game: game.key, mode: "challenge", challenge: challenge.id });
+
+      if (!run) {
+        if (challenge.results[user.id]) fail(409, "You have already played that challenge.");
+        if (Date.now() >= challenge.expiresAt) fail(410, "That challenge has run out of time.");
+        /*
+         * The clock starts here, when the round is dealt - not when the
+         * challenge was sent. Whoever was asleep when it arrived has not
+         * already lost.
+         */
+        run = newRun({
+          game: game.key,
+          mode,
+          owner,
+          challenge: challenge.id,
+          seed: challenge.seed,
+          difficulty: challenge.difficulty || undefined,
+        });
+      }
     } else {
       /*
        * Unlimited means a new puzzle whenever you ask for one - and a page
@@ -522,18 +676,42 @@ function buildApi(store) {
     };
   });
 
+  /* What is sitting in the Friends section asking to be dealt with. */
+  function waitingFor(userId) {
+    const requests = store.data.requests.filter((r) => r.to === userId).length;
+    const now = Date.now();
+    let duels_ = 0, results = 0;
+    for (const one of store.data.challenges) {
+      if (!duels.isPlayer(one, userId)) continue;
+      if (duels.isWaitingOn(one, userId) && now < one.expiresAt) duels_ += 1;
+      /* A duel that ended while they were not looking, still unread. */
+      else if (one.settledAt && !(one.seen && one.seen[userId])) results += 1;
+    }
+    return { requests, duels: duels_, results, total: requests + duels_ + results };
+  }
+
   /* ----------------------------------------------------------- friends */
 
   router.get("/api/friends", (ctx) => {
     const user = requireUser(ctx);
+    sweepDuels(store);
     const ids = friendIdsOf(store, user.id);
 
     const friends = ids.map((id) => {
       const totals = stats.totals(store, id, today());
       return {
         ...auth.publicUser(store.data.users[id]),
+        /* The character they are wearing, so the list looks like the club
+         * rather than a column of initials. */
+        character: (progress.publicFor(store, id) || {}).character || null,
+        level: (progress.publicFor(store, id) || {}).level || 1,
         totals,
         today: stats.todayProgress(store, id, today()),
+        /* How the two of you stand, and whether anything is waiting. */
+        standing: duels.standing(store, user.id, id),
+        duels: duels.forUser(store, user.id)
+          .filter((one) => !one.settledAt && duels.isPlayer(one, id))
+          .map((one) => duelView(store, one, user.id)),
       };
     }).sort((a, b) => b.totals.played - a.totals.played);
 
@@ -601,6 +779,13 @@ function buildApi(store) {
     const user = requireUser(ctx);
     const [a, b] = pairKey(user.id, ctx.params.id);
     store.data.friendships = store.data.friendships.filter((f) => !(f.a === a && f.b === b));
+
+    /* Anything you had going with them stops here. Leaving an open duel
+     * behind would mean a puzzle in somebody's list from a person who is no
+     * longer in their friends list at all. */
+    for (const one of duels.forUser(store, user.id)) {
+      if (!one.settledAt && duels.isPlayer(one, ctx.params.id)) duels.decline(store, one, user.id);
+    }
     store.touch();
     return { ok: true };
   });
@@ -611,6 +796,82 @@ function buildApi(store) {
     store.data.requests = store.data.requests.filter((r) => r.id !== request.id);
     store.touch();
   }
+
+  /* --------------------------------------------------------- challenges */
+
+  /*
+   * Everything you are duelling over, in the three states that matter: your
+   * turn, their turn, and done. The screen sorts them into those piles; the
+   * server just makes sure the expired ones have been settled first.
+   */
+  router.get("/api/challenges", (ctx) => {
+    const user = requireUser(ctx);
+    sweepDuels(store);
+    return {
+      challenges: duels.forUser(store, user.id).map((one) => duelView(store, one, user.id)),
+    };
+  });
+
+  /* Throw one down. */
+  router.post("/api/challenges", (ctx) => {
+    const user = requireUser(ctx);
+    const game = games.get(String(ctx.body.game || ""));
+    if (!game) fail(404, "No such game.");
+
+    const target = ctx.body.handle
+      ? auth.findByHandle(store, ctx.body.handle)
+      : store.data.users[String(ctx.body.to || "")];
+
+    if (!target) fail(404, "Nobody here goes by that name.");
+    if (target.id === user.id) fail(400, "You would win, and you would lose.");
+    /*
+     * Friends only, on purpose. A challenge lands in somebody's list and asks
+     * for twenty minutes of their evening; being able to send one to a
+     * stranger makes that a way to pester people rather than a game.
+     */
+    if (!areFriends(store, user.id, target.id)) fail(403, "You can only challenge friends.");
+
+    /* One open duel at a time per friend per game, or an afternoon of tapping
+     * the button leaves them with forty rounds to play. */
+    const open = duels.forUser(store, user.id).find((one) =>
+      !one.settledAt && one.game === game.key && duels.isPlayer(one, target.id));
+    if (open) fail(409, "You already have a challenge going with them in that game.");
+
+    const difficulty = game.key === "travle" && ctx.body.difficulty
+      ? String(ctx.body.difficulty) : null;
+
+    const challenge = duels.create(store, { from: user.id, to: target.id, game: game.key, difficulty });
+    duels.prune(store, user.id);
+    duels.prune(store, target.id);
+    store.touch();
+    return { challenge: duelView(store, challenge, user.id) };
+  });
+
+  /* Turn one down. Nobody wins it, and nobody is paid for it. */
+  router.post("/api/challenges/:id/decline", (ctx) => {
+    const user = requireUser(ctx);
+    const challenge = duels.find(store, ctx.params.id);
+
+    if (!challenge) fail(404, "That challenge is no longer there.");
+    if (!duels.isPlayer(challenge, user.id)) fail(403, "That challenge is not yours.");
+    if (challenge.settledAt) fail(409, "That one is already over.");
+    if (challenge.results[user.id]) fail(409, "You have already played it.");
+
+    duels.decline(store, challenge, user.id);
+    return { challenge: duelView(store, challenge, user.id) };
+  });
+
+  /* Mark the result as read, so it is announced once rather than every time. */
+  router.post("/api/challenges/:id/seen", (ctx) => {
+    const user = requireUser(ctx);
+    const challenge = duels.find(store, ctx.params.id);
+    if (!challenge) fail(404, "That challenge is no longer there.");
+    if (!duels.isPlayer(challenge, user.id)) fail(403, "That challenge is not yours.");
+    if (!challenge.seen) challenge.seen = {};
+    challenge.seen[user.id] = Date.now();
+    store.touch();
+    return { ok: true };
+  });
 
   /*
    * The board everyone actually argues about. Ranked on daily wins, because

@@ -1,7 +1,8 @@
 # Puzzle Club
 
-Five puzzle games, each with a daily puzzle and an unlimited one. Accounts,
-friends, streaks, and puzzles you can build yourself and send to people.
+Nine puzzle games, each with a daily puzzle and an unlimited one. Accounts,
+friends, streaks, duels against your friends, and puzzles you can build
+yourself and send to people.
 
 There are two ways to run it, from the same source.
 
@@ -13,7 +14,7 @@ node server.js        # then open http://127.0.0.1:3000
 
 Nothing to install. No database, no build step, no dependencies at runtime —
 Node 18 or newer is the only requirement. This is the version with sign-up,
-friends, standings, and a server that keeps the answers to itself.
+friends, duels, standings, and a server that keeps the answers to itself.
 
 ### The single page — no server at all
 
@@ -174,12 +175,48 @@ You can play everything without an account, including a puzzle someone shared
 with you. Signing up attaches a name to the session you already have, so a
 round played as a guest carries over.
 
-An account adds streaks and stats, friends, and the puzzle builder. Add a
-friend by username; requests go both ways, and if you add someone who has
-already added you, that just means yes.
+An account adds streaks and stats, friends, duels, and the puzzle builder.
+
+The **Friends** section has three tabs. *Friends* is who is in your club and
+how they did on today's puzzles; add somebody by username, and requests go
+both ways, so adding someone who has already added you just means yes.
+*Duels* is what you are supposed to be playing. *Standings* is who is winning.
 
 The standings rank on daily wins, then streak, then fewest hints. Unlimited
 rounds are deliberately left out — they would only measure spare time.
+
+### Duels
+
+Challenge a friend and you both get the **same puzzle**, and whoever finishes
+it faster wins. It is one of the few places in the club where somebody else's
+round changes what yours was worth, so the rules are written down:
+
+- The puzzle is a seed, like every other puzzle here. Both sides build the
+  same board from the same eight bytes; neither can be handed an easier one.
+- **The clock starts when you open it**, not when it was sent. Being asleep
+  when a challenge arrives costs you nothing.
+- **Solving beats not solving**, whatever the clock says. And if neither of
+  you solved it, it is a **draw** — otherwise the way to win a duel you cannot
+  do would be to throw it away faster than the other person.
+- Between two solves it is the clock, then fewer guesses, then fewer hints.
+- Turning up beats not turning up. A duel runs out after two days and is then
+  decided on whoever played it.
+- Your attempt stands, exactly like a daily. There is no second go.
+
+If your opponent has already played, the board tells you the time to beat and
+the clock above it turns red once you are past it. You can still finish, and
+finishing still beats not finishing.
+
+Winning pays 150 XP on top of what the round itself was worth; a draw pays 90
+and a loss pays 40, because a duel that costs you something to lose is a duel
+people stop accepting. Not turning up pays nothing. Four achievements are
+duel-only, and the two cosmetics behind them — the Thrown Gauntlet and the
+Duelling Mask — are the only pieces in the club that need a second person.
+
+Challenges go to friends only, and one at a time per friend per game. A
+challenge lands in somebody's list and asks for their evening; being able to
+send one to a stranger, or forty to a friend, would make that pestering rather
+than a game.
 
 ### Playing Pips
 
@@ -224,10 +261,10 @@ towards. What it does not have is the part that made those passes a business.
 Nothing is bought, nothing expires, and no tier is locked behind anything but
 playing.
 
-Everything on it is cosmetic. There are fifty-seven pieces across seven slots —
-outfit, head, face, what you are holding, backdrop, frame and title — and none
-of them makes a puzzle easier, gives a hint, or moves you up the board. It is a
-hat. Two things stay free and unlocked from the first round, and it is worth
+Everything on it is cosmetic. There are fifty-seven pieces on the track across
+seven slots — outfit, head, face, what you are holding, backdrop, frame and
+title — and none of them makes a puzzle easier, gives a hint, or moves you up
+the board. It is a hat. Two things stay free and unlocked from the first round, and it is worth
 saying why: **skin tone and accent colour**. Those are how a person looks, not a
 reward for grinding, and putting them behind level 30 would be a nasty thing to
 do.
@@ -235,6 +272,28 @@ do.
 The character is drawn as one SVG built from the slots — no images to load,
 which is what lets sixty of them sit on a leaderboard at once and lets the
 single-page build carry the whole wardrobe without growing a sprite sheet.
+
+### Achievements
+
+Forty of them, four or five per game plus a handful for the club as a whole and
+four for duels. Each pays XP, and most hand over a cosmetic.
+
+They exist because XP cannot say certain things. It measures how a round went
+and adds up over months; it cannot say *you got it in one*, or *you found every
+word in the hive*, or *you did all nine of today's puzzles*. Those are moments,
+not gradients, and a number going up quietly is a poor way to mark one.
+
+Seventeen of the cosmetics they hand over sit on **no tier of the pass at
+all**. Playing for a season will not get you the Lucky Horseshoe; the only way
+to have it is to guess a Wordle first try. That is the point of having them. A
+pass rewards turning up, which is worth rewarding, but nothing on a pass can
+say "look what I did".
+
+Nothing is hidden: the locked ones are listed with what they want, because a
+secret you cannot aim at is not a goal. They are settled with the round, so a
+round that both fills the bar and earns a badge levels you up once rather than
+twice — except the duel ones, which cannot be settled until the other person
+has played.
 
 ### The board
 
@@ -269,6 +328,7 @@ src/server/
   http.js              router, body reading, static serving
   rng.js               seeded randomness and the shared idea of "today"
   stats.js             tallies, streaks, the friends feed
+  challenges.js        duels: one puzzle, two people, and who won
   xp.js                what a round is worth, and the fifty-level curve
   cosmetics.js         the pass: every item, its slot, rarity and tier
   progress.js          the seam between those two and the store
@@ -280,8 +340,9 @@ public/                the browser app: no build step, no framework
   js/character.js      the wardrobe, drawn: every cosmetic as SVG paths
   js/screens/pass.js   the fifty-tier track and the wardrobe
   js/screens/board.js  the universal leaderboard
-tests/run.js           96 tests over the real HTTP server
-tests/play.js          20 tests that play every game through to a finish
+  js/screens/friends.js friends, duels and the head-to-head record
+tests/run.js           108 tests over the real HTTP server
+tests/play.js          22 tests that play every game through to a finish
 scripts/build-data.mjs regenerates data/ from the source word lists
 scripts/build-artifact.mjs packs everything into one static HTML file
 scripts/check-hoisting.mjs catches helpers used before they exist
@@ -337,9 +398,9 @@ The countdown on the home screen is the real time until that turnover.
 npm test
 ```
 
-116 tests, in two suites, both against the real HTTP server.
+130 tests, in two suites, both against the real HTTP server.
 
-`tests/run.js` is 96 tests on the machinery: sessions, resuming a round, whether
+`tests/run.js` is 108 tests on the machinery: sessions, resuming a round, whether
 an answer leaks before it should, whether a finished round can be counted twice,
 whether two people racing for one username can both have it, whether the store
 is reachable over HTTP (it is not, and it holds password hashes), and whether a
@@ -353,12 +414,19 @@ that a finished round cannot be paid out twice, that you cannot wear what you
 have not unlocked, and that the board gives away a name and a level and nothing
 else.
 
-`tests/play.js` — also `npm run play` — is 20 tests that sit down and play. Every
+Six more are the duels: that both halves of one are the same puzzle and that
+nobody else can open it, that an expired one is decided on whoever turned up,
+that two people who both failed to solve it draw rather than the faster failure
+winning, that a declined challenge pays nobody, and that a challenge needs a
+friend on the other end of it.
+
+`tests/play.js` — also `npm run play` — is 22 tests that sit down and play. Every
 one of the nine games is driven to a finish over HTTP the way a person would
 play it: guessed, solved, traced, walked. Wordle is won and also lost; Connections
 is solved and also failed on four mistakes; Travle walks a shortest route and
-then reaches an island by sea. It is the suite that catches a game that is
-technically correct and unplayable.
+then reaches an island by sea. Two accounts duel over one puzzle and the faster
+solve wins it. It is the suite that catches a game that is technically correct
+and unplayable.
 
 It also plays the whole matrix, because a game can be fine on its unlimited
 board and broken on its daily — those are different code paths. Every game is

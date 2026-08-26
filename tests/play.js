@@ -439,6 +439,102 @@ function peek(id) {
     assert.equal(mine.level, pass.level);
   });
 
+  /* ------------------------------------------------------------ duels */
+
+  /*
+   * A challenge is the one thing in the club where somebody else's round
+   * changes what yours was worth, so it is worth playing all the way through
+   * rather than asserting on the module in isolation: two accounts, two
+   * rounds of the same puzzle, and a winner.
+   */
+  await test("two friends duel over the same puzzle, and the faster one wins", async () => {
+    const alice = client(), bob = client();
+    await alice("GET", "/api/me");
+    await bob("GET", "/api/me");
+    await alice("POST", "/api/auth/signup", { handle: "duelalice", password: "en garde please" });
+    await bob("POST", "/api/auth/signup", { handle: "duelbob", password: "en garde please" });
+
+    /* Strangers cannot be challenged: it lands in somebody's list and asks
+     * for their evening. */
+    const stranger = await alice("POST", "/api/challenges", { handle: "duelbob", game: "wordle" });
+    assert.equal(stranger.status, 403, "a stranger could be challenged");
+
+    await alice("POST", "/api/friends/request", { handle: "duelbob" });
+    await bob("POST", "/api/friends/request", { handle: "duelalice" });   // asking back is a yes
+
+    const made = await alice("POST", "/api/challenges", { handle: "duelbob", game: "wordle" });
+    assert.equal(made.status, 200, `the challenge would not send: ${made.body && made.body.error}`);
+    const id = made.body.challenge.id;
+
+    /* One at a time per friend per game. */
+    const twice = await alice("POST", "/api/challenges", { handle: "duelbob", game: "wordle" });
+    assert.equal(twice.status, 409, "a second open duel was allowed in the same game");
+
+    /* Both sides get the same board, built from the duel's seed. */
+    const aRun = (await alice("POST", "/api/play/wordle", { mode: "challenge", challenge: id })).body.run;
+    const bRun = (await bob("POST", "/api/play/wordle", { mode: "challenge", challenge: id })).body.run;
+    assert.equal(peek(aRun.id).answer, peek(bRun.id).answer, "the two of them got different puzzles");
+
+    /* Alice solves it in one; Bob takes his time and three guesses. */
+    await playOut(alice, aRun);
+    await new Promise((r) => setTimeout(r, 30));
+    await bob("POST", `/api/runs/${bRun.id}/guess`, { value: "crane" });
+    await playOut(bob, bRun);
+
+    const hers = (await alice("GET", "/api/challenges")).body.challenges.find((c) => c.id === id);
+    const his = (await bob("GET", "/api/challenges")).body.challenges.find((c) => c.id === id);
+
+    assert.equal(hers.settled, true, "the duel did not settle once both had played");
+    assert.equal(hers.outcome, "won", "the faster player did not win");
+    assert.equal(his.outcome, "lost", "the slower player did not lose");
+    assert.ok(hers.theirs, "the winner cannot see what she beat");
+    assert.ok(hers.mine.took <= his.mine.took, "the times are the wrong way round");
+
+    /* Both are paid, and the winner is paid more. */
+    assert.ok(hers.earned.xp > his.earned.xp, "losing paid as well as winning");
+    assert.ok(his.earned.xp > 0, "losing a duel paid nothing at all");
+    assert.ok(hers.earned.badges.some((b) => b.id === "duel:first"), "the first duel won earned nothing");
+
+    /* And the head-to-head record says so, from both sides. */
+    assert.deepEqual(
+      { wins: hers.standing.wins, losses: hers.standing.losses },
+      { wins: 1, losses: 0 });
+    assert.deepEqual(
+      { wins: his.standing.wins, losses: his.standing.losses },
+      { wins: 0, losses: 1 });
+  });
+
+  await test("a duel is one attempt, and solving beats being quick about losing", async () => {
+    const carol = client(), dave = client();
+    await carol("GET", "/api/me");
+    await dave("GET", "/api/me");
+    await carol("POST", "/api/auth/signup", { handle: "duelcarol", password: "en garde please" });
+    await dave("POST", "/api/auth/signup", { handle: "dueldave", password: "en garde please" });
+    await carol("POST", "/api/friends/request", { handle: "dueldave" });
+    await dave("POST", "/api/friends/request", { handle: "duelcarol" });
+
+    const id = (await carol("POST", "/api/challenges", { handle: "dueldave", game: "wordle" }))
+      .body.challenge.id;
+
+    /* Dave throws his away in seconds; Carol takes far longer and solves it. */
+    const dRun = (await dave("POST", "/api/play/wordle", { mode: "challenge", challenge: id })).body.run;
+    const secret = peek(dRun.id).answer;
+    for (const word of ["zonal", "crumb", "digit", "wharf", "spilt", "mucky"].filter((w) => w !== secret)) {
+      await dave("POST", `/api/runs/${dRun.id}/guess`, { value: word });
+    }
+
+    await new Promise((r) => setTimeout(r, 40));
+    const cRun = (await carol("POST", "/api/play/wordle", { mode: "challenge", challenge: id })).body.run;
+    await playOut(carol, cRun);
+
+    const hers = (await carol("GET", "/api/challenges")).body.challenges.find((c) => c.id === id);
+    assert.equal(hers.outcome, "won", "a solve lost to a fast surrender");
+
+    /* And neither of them gets a second go at it. */
+    const again = await carol("POST", "/api/play/wordle", { mode: "challenge", challenge: id });
+    assert.equal(again.body.run.id, cRun.id, "the duel was dealt twice");
+  });
+
   console.log(`\n${results.passed} passed, ${results.failed} failed`);
   server.close();
   try { require("node:fs").unlinkSync(process.env.DATA_FILE); } catch { /* gone */ }

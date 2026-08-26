@@ -1049,6 +1049,107 @@ async function main() {
     assert.ok(!after.body.friends.some((f) => f.handle === "carol"));
   });
 
+  /* ------------------------------------------------------------- duels */
+
+  console.log("\nduels");
+
+  await test("a duel deals one puzzle to both sides, and only to them", async () => {
+    const made = await alice("POST", "/api/challenges", { handle: "bob", game: "wordle" });
+    assert.equal(made.status, 200, `the challenge failed: ${made.body && made.body.error}`);
+    const id = made.body.challenge.id;
+
+    const hers = await alice("POST", "/api/play/wordle", { mode: "challenge", challenge: id });
+    const his = await bob("POST", "/api/play/wordle", { mode: "challenge", challenge: id });
+    assert.equal(answerTo(hers.body.run.id).answer, answerTo(his.body.run.id).answer,
+      "the two halves of a duel are different puzzles");
+
+    /* Neither of them has been sent the answer, duel or not. */
+    assert.equal(hers.body.run.puzzle.answer, null);
+
+    /* And somebody outside it cannot open it at all. */
+    const outsider = client();
+    await outsider("GET", "/api/me");
+    await outsider("POST", "/api/auth/signup", { handle: "gatecrasher", password: "let me in please" });
+    const barged = await outsider("POST", "/api/play/wordle", { mode: "challenge", challenge: id });
+    assert.equal(barged.status, 403, "a stranger opened somebody else's duel");
+  });
+
+  await test("a duel that runs out of time is decided on whoever turned up", async () => {
+    const made = await alice("POST", "/api/challenges", { handle: "bob", game: "connections" });
+    const id = made.body.challenge.id;
+
+    /* Alice plays hers; Bob never opens it. */
+    const run = (await alice("POST", "/api/play/connections", { mode: "challenge", challenge: id })).body.run;
+    for (const group of answerTo(run.id).groups) {
+      await alice("POST", `/api/runs/${run.id}/guess`, { value: group.words });
+    }
+
+    /* Wind the clock forward rather than waiting two days for it. */
+    const record = store.data.challenges.find((one) => one.id === id);
+    assert.equal(record.settledAt, null, "it settled before anybody ran out of time");
+    record.expiresAt = Date.now() - 1;
+
+    const seen = (await alice("GET", "/api/challenges")).body.challenges.find((c) => c.id === id);
+    assert.equal(seen.settled, true, "an expired duel was never settled");
+    assert.equal(seen.expired, true);
+    assert.equal(seen.outcome, "won", "the player who turned up did not win it");
+
+    const missed = (await bob("GET", "/api/challenges")).body.challenges.find((c) => c.id === id);
+    assert.equal(missed.outcome, "missed");
+    assert.equal(missed.earned.xp, 0, "not playing a duel paid out anyway");
+  });
+
+  await test("two people who both fail to solve it draw", async () => {
+    /*
+     * The rule this is really pinning: between two losses the clock is not
+     * consulted. If it were, the way to win a duel you cannot solve would be
+     * to throw it away faster than the other person.
+     */
+    const duels = require("../src/server/challenges.js");
+    const quickLoss = { won: false, took: 900, guesses: 6, hints: 0 };
+    const slowLoss = { won: false, took: 400000, guesses: 6, hints: 0 };
+    const slowWin = { won: true, took: 900000, guesses: 4, hints: 0 };
+
+    assert.equal(duels.better(quickLoss, slowLoss), 0, "the faster loser won");
+    assert.ok(duels.better(slowWin, quickLoss) < 0, "a solve lost to a fast surrender");
+    assert.ok(duels.better(quickLoss, null) < 0, "turning up did not beat not turning up");
+  });
+
+  await test("a challenge can be turned down, and pays nobody", async () => {
+    const made = await alice("POST", "/api/challenges", { handle: "bob", game: "boxed" });
+    const id = made.body.challenge.id;
+
+    assert.equal((await bob("POST", `/api/challenges/${id}/decline`, {})).status, 200);
+
+    const gone = (await bob("GET", "/api/challenges")).body.challenges.find((c) => c.id === id);
+    assert.ok(gone.declined, "the duel is not marked as turned down");
+    assert.equal(gone.earned, null, "a duel nobody played paid out");
+
+    /* And it cannot then be played. */
+    const anyway = await bob("POST", "/api/play/boxed", { mode: "challenge", challenge: id });
+    assert.equal(anyway.status, 410);
+  });
+
+  await test("a duel needs a friend on the other end of it", async () => {
+    const nobody = client();
+    await nobody("GET", "/api/me");
+    await nobody("POST", "/api/auth/signup", { handle: "notafriend", password: "let me in please" });
+
+    assert.equal((await alice("POST", "/api/challenges", { handle: "notafriend", game: "wordle" })).status, 403);
+    assert.equal((await alice("POST", "/api/challenges", { handle: "alice", game: "wordle" })).status, 400);
+    assert.equal((await alice("POST", "/api/challenges", { handle: "bob", game: "nonsense" })).status, 404);
+  });
+
+  await test("what is waiting is counted for the badge", async () => {
+    const { body } = await bob("GET", "/api/me");
+    assert.ok(body.waiting, "no waiting count for a signed-in player");
+    assert.equal(typeof body.waiting.total, "number");
+    /* A guest has none of it rather than a row of zeroes. */
+    const guest = client();
+    const out = await guest("GET", "/api/me");
+    assert.equal(out.body.waiting, null);
+  });
+
   /* ---------------------------------------------------- custom puzzles */
 
   console.log("\ncustom puzzles");

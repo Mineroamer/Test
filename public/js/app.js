@@ -20,6 +20,9 @@ export const state = {
   progress: {},
   /* Level, XP and what is unlocked. Null for a guest, who has none of it. */
   pass: null,
+  /* What is sitting in Friends waiting to be dealt with: requests, duels to
+   * play, results not yet read. Null for a guest. */
+  waiting: null,
 };
 
 const screen = document.getElementById("screen");
@@ -86,8 +89,17 @@ function paintAccount() {
     : [["#/friends", "Friends"], ["#/pass", "Pass"], ["#/achievements", "Awards"],
        ["#/board", "Board"], ["#/create", "Build"], ["#/stats", "Stats"]];
 
+  /* One number on Friends, covering requests, duels waiting on you, and
+   * results you have not seen. Three separate badges on one bar would be
+   * three things to decode; a single count is a single thing to go and do. */
+  const waiting = (state.waiting && state.waiting.total) || 0;
+
   swap(nav, state.user
-    ? sections.map(([href, label]) => h("a.btn.ghost.small", { href }, label))
+    ? sections.map(([href, label]) => h("a.btn.ghost.small", { href },
+        label,
+        href === "#/friends" && waiting
+          ? h("span.badge", { "aria-label": `${waiting} waiting` }, String(waiting))
+          : null))
     /* The board is the one section worth offering before signing up: it is
      * the thing an account gets you onto. */
     : [h("a.btn.ghost.small", { href: "#/board" }, "Board")]);
@@ -183,7 +195,9 @@ async function pick(parts) {
       if (state.local) return notFound();
       requireUser();
       const mod = await SCREENS.friends();
-      return mod.render();
+      /* #/friends, #/friends/duels, #/friends/standings - the tab is part of
+       * the address, so it can be linked to and the back button works. */
+      return mod.render(rest[0] || "");
     }
     case "stats": {
       requireUser();
@@ -212,8 +226,16 @@ async function pick(parts) {
       return mod.render(rest[0] || null);
     }
     case "play": {
-      const [game, mode] = rest;
+      const [game, mode, extra] = rest;
       const mod = await SCREENS.play();
+      /* #/play/<game>/challenge/<id> is a duel: the third part names which.
+       * Duels need two accounts on a shared server, which the packed
+       * single-page build does not have. */
+      if (mode === "challenge") {
+        if (state.local) return notFound();
+        requireUser();
+        return mod.render({ game, mode: "challenge", challenge: extra || "" });
+      }
       return mod.render({ game, mode: mode || "daily" });
     }
     case "puzzle": {

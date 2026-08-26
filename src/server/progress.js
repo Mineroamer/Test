@@ -131,6 +131,55 @@ const levelsBetween = (from, to) => {
   return out;
 };
 
+/**
+ * Settle the end of a duel for one of the two people in it.
+ *
+ * Kept apart from `award` on purpose. A duel pays when it is *decided*, which
+ * is usually not when either round finished: the person who played first is
+ * paid for winning hours later, while they are not looking. So this returns
+ * what happened rather than assuming anyone is there to be told, and the
+ * screen reads it off the challenge next time it is opened.
+ *
+ * `outcome` is "won", "drew", "lost", or "missed" for somebody who never
+ * played. Missing pays nothing - it is the one way to get nothing out of a
+ * duel, and it should be, or a challenge would be free XP for ignoring it.
+ */
+function duel(store, userId, { outcome, record = {} }) {
+  if (!userId) return null;
+
+  const row = rowFor(store, userId);
+  const before = xp.progressFor(row.xp);
+  const gained = xp.duelXp(outcome);
+
+  const now = Date.now();
+  const badges = achievements.earnedBy({ kind: "duel", ...record }, badgesOf(row));
+  for (const one of badges) row.badges[one.id] = now;
+  const badgeXp = badges.reduce((sum, one) => sum + one.xp, 0);
+
+  row.xp += gained + badgeXp;
+  row.level = xp.levelFor(row.xp);
+  const after = xp.progressFor(row.xp);
+
+  if (gained + badgeXp > 0) {
+    row.awards.push({ at: now, game: "duel", mode: "challenge", xp: gained + badgeXp });
+    if (row.awards.length > AWARDS_KEPT) row.awards = row.awards.slice(-AWARDS_KEPT);
+  }
+  store.touch();
+
+  return {
+    outcome,
+    xp: gained,
+    badges: badges.map((one) => achievements.publicOf(one, now)),
+    badgeXp,
+    before: before.level,
+    after: after.level,
+    levelled: after.level > before.level,
+    unlocked: after.level > before.level
+      ? levelsBetween(before.level, after.level).flatMap((l) => cosmetics.rewardsAt(l))
+      : [],
+  };
+}
+
 /** Everything the browser needs to draw the pass for one player. */
 function forUser(store, userId) {
   const row = rowFor(store, userId);
@@ -246,6 +295,6 @@ function leaderboard(store, { window: span = "all", limit = 100, viewer = null }
 }
 
 module.exports = {
-  blank, rowFor, award, forUser, achievementsFor, markSeen, equip, publicFor,
+  blank, rowFor, award, duel, forUser, achievementsFor, markSeen, equip, publicFor,
   leaderboard, playedToday, badgesOf, AWARDS_KEPT,
 };
