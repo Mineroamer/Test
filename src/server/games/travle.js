@@ -182,6 +182,10 @@ function summary(puzzle, state) {
     hints: (state.hints || []).length,
     par: game.par,
     over: Math.max(0, game.used - game.par),
+    /* How much of the walk was by sea. Nothing on screen reads this - it is
+     * what lets "you crossed the water" be something worth noticing. */
+    crossings: game.trail.reduce((n, code, i) =>
+      (i > 0 && Engine.linkBetween(game.trail[i - 1], code) ? n + 1 : n), 0),
     grid: game.moves.map((m) => m.move),
   };
 }

@@ -24,6 +24,7 @@ const { server, store } = require("../server.js");
 const games = require("../src/server/games/index.js");
 const xpRules = require("../src/server/xp.js");
 const cosmeticTrack = require("../src/server/cosmetics.js");
+const achievementList = require("../src/server/achievements.js");
 const { puzzleForRun } = require("../src/server/api.js");
 
 let base = "";
@@ -1285,8 +1286,11 @@ async function main() {
   });
 
   await test("every tier gives something and nothing is unreachable", async () => {
+    /* Only the pass's own pieces. The ones an achievement hands over are on no
+     * tier at all - that is what makes them worth having. */
+    const onTrack = cosmeticTrack.ITEMS.filter((item) => item.level);
     const byLevel = new Map();
-    for (const item of cosmeticTrack.ITEMS) {
+    for (const item of onTrack) {
       byLevel.set(item.level, (byLevel.get(item.level) || 0) + 1);
     }
     for (let level = 1; level <= xpRules.LEVELS; level += 1) {
@@ -1300,8 +1304,23 @@ async function main() {
 
     /* Every slot needs a level 1 piece, or a new player has an empty one. */
     for (const slot of cosmeticTrack.SLOTS) {
-      assert.ok(cosmeticTrack.ITEMS.some((i) => i.slot === slot.key && i.level === 1),
+      assert.ok(onTrack.some((i) => i.slot === slot.key && i.level === 1),
         `${slot.key} has nothing to start in`);
+    }
+
+    /* And an earned piece is earned, never reached: one on a tier as well
+     * would be handed to everybody, which is the opposite of the point. */
+    for (const item of cosmeticTrack.earnable()) {
+      assert.equal(item.level, undefined,
+        `${item.slot}/${item.id} is both earned and on tier ${item.level}`);
+      assert.ok(achievementList.find(item.earn),
+        `${item.slot}/${item.id} is earned by "${item.earn}", which is not an achievement`);
+    }
+    for (const one of achievementList.ACHIEVEMENTS) {
+      if (!one.cosmetic) continue;
+      const piece = cosmeticTrack.find(one.cosmetic.slot, one.cosmetic.id);
+      assert.ok(piece, `${one.id} gives a piece that does not exist`);
+      assert.equal(piece.earn, one.id, `${one.id} and ${piece.id} disagree about each other`);
     }
   });
 
@@ -1349,7 +1368,9 @@ async function main() {
     assert.ok(done.body.run.earned.xp > 0);
 
     const after = await player("GET", "/api/pass");
-    assert.equal(after.body.pass.xp, done.body.run.earned.xp);
+    /* The round's own XP plus whatever its achievements paid. A first win is
+     * very likely to earn one, so the two are added rather than assumed apart. */
+    assert.equal(after.body.pass.xp, done.body.run.earned.xp + done.body.run.earned.badgeXp);
 
     /* A guest plays the same round and is given nothing to record. */
     const guest = client();
@@ -1419,6 +1440,127 @@ async function main() {
     }
     const junk = await player("PUT", "/api/pass/character", { character: { hue: "purple" } });
     assert.equal(typeof junk.body.character.hue, "number");
+  });
+
+  await test("an achievement pays its XP and hands over its piece", async () => {
+    const player = client();
+    await player("GET", "/api/me");
+    await player("POST", "/api/auth/signup", { handle: "firsttry", password: "one guess only" });
+
+    /* A Wordle in one: the rarest thing on the list, and the only way to the
+     * horseshoe. */
+    const run = await player("POST", "/api/play/wordle", { mode: "unlimited", fresh: true });
+    const answer = answerTo(run.body.run.id).answer;
+    const done = await player("POST", `/api/runs/${run.body.run.id}/guess`, { value: answer });
+
+    const got = done.body.run.earned;
+    const ids = got.badges.map((one) => one.id);
+    assert.ok(ids.includes("wordle:one"), `expected Lucky Strike, got ${JSON.stringify(ids)}`);
+    assert.equal(got.badgeXp, got.badges.reduce((n, one) => n + one.xp, 0));
+    assert.ok(got.badgeXp > got.xp, "the achievement should dwarf the round itself");
+
+    /* The horseshoe is on no tier, and this player is level 1 or 2 - so if it
+     * is wearable, it is because the achievement gave it. */
+    const pass = (await player("GET", "/api/pass")).body.pass;
+    const shoe = pass.unlocked.find((item) => item.slot === "held" && item.id === "horseshoe");
+    assert.ok(shoe, "the horseshoe was not unlocked");
+    assert.equal(shoe.earn, "wordle:one");
+    assert.equal(cosmeticTrack.find("held", "horseshoe").level, undefined);
+
+    const worn = await player("PUT", "/api/pass/character", { character: { held: "horseshoe" } });
+    assert.equal(worn.body.character.held, "horseshoe", "it could not be put on");
+  });
+
+  await test("a piece you have not earned cannot be worn", async () => {
+    const player = client();
+    await player("GET", "/api/me");
+    await player("POST", "/api/auth/signup", { handle: "wishful", password: "let me wear it" });
+
+    /* Every earned piece, asked for at once, by somebody who has earned none. */
+    const asked = {};
+    for (const item of cosmeticTrack.earnable()) asked[item.slot] = item.id;
+    const worn = (await player("PUT", "/api/pass/character", { character: asked })).body.character;
+
+    for (const item of cosmeticTrack.earnable()) {
+      assert.notEqual(worn[item.slot], item.id,
+        `${item.slot}/${item.id} was worn without earning it`);
+    }
+  });
+
+  await test("nothing is earned twice", async () => {
+    const player = client();
+    await player("GET", "/api/me");
+    await player("POST", "/api/auth/signup", { handle: "twicetry", password: "one guess only" });
+
+    const first = await player("POST", "/api/play/wordle", { mode: "unlimited", fresh: true });
+    await player("POST", `/api/runs/${first.body.run.id}/guess`, { value: answerTo(first.body.run.id).answer });
+
+    const second = await player("POST", "/api/play/wordle", { mode: "unlimited", fresh: true });
+    const done = await player("POST", `/api/runs/${second.body.run.id}/guess`, { value: answerTo(second.body.run.id).answer });
+
+    assert.deepEqual(done.body.run.earned.badges, [], "the same achievements came round again");
+    assert.equal(done.body.run.earned.badgeXp, 0);
+  });
+
+  await test("the achievements list shows what is left as well as what is done", async () => {
+    const player = client();
+    await player("GET", "/api/me");
+    await player("POST", "/api/auth/signup", { handle: "lister", password: "show me the list" });
+
+    const { status, body } = await player("GET", "/api/achievements");
+    assert.equal(status, 200);
+    assert.equal(body.achievements.length, achievementList.ACHIEVEMENTS.length);
+    assert.ok(body.achievements.every((one) => one.earned === false), "a new player has none");
+
+    /* Every game has some, and so does the club. */
+    const games = new Set(body.achievements.map((one) => one.game));
+    for (const key of ["wordle", "connections", "bee", "boxed", "mini", "crossword", "strands", "pips", "travle"]) {
+      assert.ok(games.has(key), `${key} has no achievements`);
+    }
+    assert.ok(games.has(null), "the club has none");
+
+    /* The prize is named here rather than looked up on the other side: this
+     * page can be the first thing somebody opens. */
+    for (const one of body.achievements) {
+      assert.ok(one.name && one.blurb && one.xp > 0, `${one.id} is missing something`);
+      if (one.cosmetic) {
+        assert.ok(one.cosmetic.name && one.cosmetic.name !== one.cosmetic.id,
+          `${one.id} names its prize "${one.cosmetic.name}"`);
+      }
+    }
+  });
+
+  await test("achievements are not offered to a guest", async () => {
+    const guest = client();
+    await guest("GET", "/api/me");
+    assert.equal((await guest("GET", "/api/achievements")).status, 401);
+
+    /* And a guest's round pays nothing, achievements included. */
+    const run = await guest("POST", "/api/play/wordle", { mode: "unlimited", fresh: true });
+    const done = await guest("POST", `/api/runs/${run.body.run.id}/guess`, { value: answerTo(run.body.run.id).answer });
+    assert.equal(done.body.run.earned, null);
+  });
+
+  await test("a check that throws costs nobody their round", async () => {
+    /* An achievement is a garnish. If one of them is broken, the round it was
+     * garnishing must still finish, still count, and still pay. */
+    const broken = { id: "test:broken", game: "wordle", name: "Broken", blurb: "", xp: 10,
+      rarity: "common", check: () => { throw new Error("this one is broken"); } };
+    achievementList.ACHIEVEMENTS.push(broken);
+    try {
+      const player = client();
+      await player("GET", "/api/me");
+      await player("POST", "/api/auth/signup", { handle: "unlucky", password: "still counts" });
+      const run = await player("POST", "/api/play/wordle", { mode: "unlimited", fresh: true });
+      const done = await player("POST", `/api/runs/${run.body.run.id}/guess`, { value: answerTo(run.body.run.id).answer });
+
+      assert.equal(done.status, 200);
+      assert.equal(done.body.run.puzzle.status, "won");
+      assert.ok(done.body.run.earned.xp > 0, "the round still pays");
+      assert.equal(done.body.run.earned.badges.some((one) => one.id === "test:broken"), false);
+    } finally {
+      achievementList.ACHIEVEMENTS.pop();
+    }
   });
 
   await test("the board ranks everyone, and a guest may look at it", async () => {

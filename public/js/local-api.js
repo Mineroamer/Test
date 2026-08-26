@@ -24,6 +24,7 @@ const { dayNumber, msUntilReset, dayLabel } = window.PC.rng;
  * thing it means on the hosted club. */
 const xp = window.PC.xp;
 const cosmetics = window.PC.cosmetics;
+const achievements = window.PC.achievements;
 
 const CATALOGUE = window.PC.catalogue;
 const STORE_KEY = "pc:local";
@@ -39,7 +40,7 @@ const STORE_KEY = "pc:local";
 const blank = () => ({
   player: null, runs: {}, stats: {}, results: [], progress: {},
   /* The pass, per device rather than per account - there is no account. */
-  pass: { xp: 0, character: null, seenLevel: 1 },
+  pass: { xp: 0, character: null, seenLevel: 1, badges: {} },
 });
 
 let state = load();
@@ -206,8 +207,10 @@ function settle(run) {
  * everything and nothing is written down. */
 function awardXp(run, summary) {
   if (!state.player) return null;
+  if (!state.pass.badges) state.pass.badges = {};
 
-  const since = new Date(new Date().setHours(0, 0, 0, 0)).getTime();
+  /* The day the taper counts against is the same UTC day the puzzles use. */
+  const since = xp.startOfDay ? xp.startOfDay() : new Date().setUTCHours(0, 0, 0, 0);
   const already = state.results.filter((r) => r.game === run.game && r.at >= since).length;
 
   const before = xp.progressFor(state.pass.xp);
@@ -216,7 +219,20 @@ function awardXp(run, summary) {
     summary, took: run.finishedAt - run.startedAt, already,
   });
 
-  state.pass.xp += earned.xp;
+  /* Same achievements, same rules, off the record kept on this device. */
+  const now = Date.now();
+  const won = achievements.earnedBy(
+    {
+      game: run.game, mode: run.mode, difficulty: run.difficulty,
+      summary, took: run.finishedAt - run.startedAt, won: !!summary.won,
+      ...localRecord(run.game),
+    },
+    Object.keys(state.pass.badges)
+  );
+  for (const one of won) state.pass.badges[one.id] = now;
+  const badgeXp = won.reduce((sum, one) => sum + one.xp, 0);
+
+  state.pass.xp += earned.xp + badgeXp;
   const after = xp.progressFor(state.pass.xp);
   const gained = [];
   for (let level = before.level + 1; level <= after.level; level += 1) {
@@ -226,10 +242,34 @@ function awardXp(run, summary) {
   return {
     xp: earned.xp, won: earned.won, quality: earned.quality, weight: earned.weight,
     repeat: run.mode !== "daily" && already >= xp.FREE_ROUNDS,
+    badges: won.map((one) => achievements.publicOf(one, now)),
+    badgeXp,
     before: before.level, after: after.level,
     levelled: after.level > before.level,
     unlocked: gained,
     progress: after,
+  };
+}
+
+/* What the achievements ask about, from the tallies kept on this device. */
+function localRecord(game) {
+  /* The keys are "game:mode[:variant]", so the game is read off the key. */
+  const buckets = Object.entries(state.stats)
+    .map(([key, bucket]) => ({ key, game: key.split(":")[0], mode: key.split(":")[1], bucket }));
+  const forGame = buckets.filter((one) => one.game === game);
+  const wonAny = new Set(buckets.filter((one) => one.bucket.won > 0).map((one) => one.game));
+
+  return {
+    played: forGame.reduce((n, one) => n + one.bucket.played, 0),
+    wins: forGame.reduce((n, one) => n + one.bucket.won, 0),
+    streak: forGame.reduce((n, one) =>
+      Math.max(n, one.mode === "daily" ? currentStreak(one.bucket, dayNumber()) : 0), 0),
+    totalPlayed: buckets.reduce((n, one) => n + one.bucket.played, 0),
+    gamesWon: wonAny.size,
+    gamesOffered: CATALOGUE.length,
+    dailiesToday: Object.keys(todayProgress()).length,
+    /* Nobody else can play a puzzle you built here - it is one device. */
+    solvesOfMine: 0,
   };
 }
 
@@ -241,8 +281,10 @@ function passView() {
     ...progress,
     character: state.pass.character,
     pending: progress.level > (state.pass.seenLevel || 1) ? (state.pass.seenLevel || 1) : null,
-    unlocked: cosmetics.unlockedAt(progress.level).map((item) => ({ ...item })),
+    unlocked: cosmetics.unlockedFor(progress.level, Object.keys(state.pass.badges || {}))
+      .map((item) => ({ ...item })),
     track: cosmetics.track(xp, progress.level),
+    badges: Object.keys(state.pass.badges || {}),
   };
 }
 
@@ -428,10 +470,19 @@ export const api = {
   }),
 
   equip: async (character) => {
-    state.pass.character = cosmetics.sanitise(character, xp.levelFor(state.pass.xp), 190);
+    state.pass.character = cosmetics.sanitise(
+      character, xp.levelFor(state.pass.xp), 190, Object.keys(state.pass.badges || {}));
     save();
     return { character: state.pass.character, pass: passView() };
   },
+
+  achievements: async () => ({
+    achievements: achievements.ACHIEVEMENTS.map((one) => ({
+      ...achievements.publicOf(one, (state.pass.badges || {})[one.id] || null),
+      earned: !!(state.pass.badges || {})[one.id],
+    })),
+    games: CATALOGUE.map(({ key, name, icon }) => ({ key, name, icon })),
+  }),
 
   passSeen: async () => {
     state.pass.seenLevel = xp.levelFor(state.pass.xp);

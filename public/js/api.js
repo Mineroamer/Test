@@ -57,6 +57,7 @@ export const api = {
 
   stats: () => call("GET", "/api/stats"),
   pass: () => call("GET", "/api/pass"),
+  achievements: () => call("GET", "/api/achievements"),
   equip: (character) => call("PUT", "/api/pass/character", { character }),
   passSeen: () => call("POST", "/api/pass/seen", {}),
   /* The board everybody is on, not the one just your friends are on. */

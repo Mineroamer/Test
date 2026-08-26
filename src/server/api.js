@@ -22,6 +22,7 @@ const limiter = require("./ratelimit.js");
 const stats = require("./stats.js");
 const progress = require("./progress.js");
 const cosmetics = require("./cosmetics.js");
+const achievements = require("./achievements.js");
 const xpRules = require("./xp.js");
 const games = require("./games/index.js");
 const { Router, fail } = require("./http.js");
@@ -108,6 +109,36 @@ function runView(store, run) {
   };
 }
 
+/*
+ * What the achievements need to know beyond the round itself: how this player
+ * has done before it, and what else they have going on.
+ */
+function recordFor(store, userId, game) {
+  const today = dayNumber();
+  const per = stats.forUser(store, userId, today);
+  const mine = Object.values(per).filter((bucket) => bucket.game === game);
+  const done = stats.todayProgress(store, userId, today);
+
+  const wonAny = new Set();
+  for (const bucket of Object.values(per)) if (bucket.won > 0) wonAny.add(bucket.game);
+
+  return {
+    /* This game */
+    played: mine.reduce((n, b) => n + b.played, 0),
+    wins: mine.reduce((n, b) => n + b.won, 0),
+    streak: mine.reduce((n, b) => Math.max(n, b.mode === "daily" ? b.streak : 0), 0),
+    /* Everything */
+    totalPlayed: Object.values(per).reduce((n, b) => n + b.played, 0),
+    gamesWon: wonAny.size,
+    gamesOffered: games.CATALOGUE.length,
+    dailiesToday: Object.keys(done).length,
+    /* Puzzles this player built that somebody else has solved. */
+    solvesOfMine: Object.values(store.data.puzzles)
+      .filter((one) => one.authorId === userId)
+      .reduce((n, one) => n + (one.solves || 0), 0),
+  };
+}
+
 const displayFor = (store, userId) => {
   const user = store.data.users[userId];
   return user ? { handle: user.handle, display: user.display, colour: user.colour } : null;
@@ -129,19 +160,11 @@ function settle(store, run, ctx) {
 
   if (ctx.user) {
     /*
-     * XP is worked out before the round is logged, because the unlimited
-     * taper counts how many rounds of this game came earlier today - and this
-     * one is not earlier than itself.
+     * Counted before the round is logged, because the unlimited taper asks how
+     * many rounds of this game came earlier today - and this one is not
+     * earlier than itself.
      */
-    run.earned = progress.award(store, ctx.user.id, {
-      game: run.game,
-      mode: run.mode,
-      difficulty: run.difficulty,
-      summary,
-      took: run.finishedAt - run.startedAt,
-      day: run.day,
-      startOfDay: startOfDay(),
-    });
+    const already = progress.playedToday(store, ctx.user.id, run.game, run.day, startOfDay());
 
     stats.record(store, ctx.user.id, {
       game: run.game,
@@ -154,6 +177,21 @@ function settle(store, run, ctx) {
       /* Travle's daily levels each keep their own record; nothing else has
        * more than one kind of round per mode. */
       variant: run.game === "travle" && run.mode === "daily" ? run.difficulty : null,
+    });
+
+    /*
+     * And settled after it, because the achievements ask about the record this
+     * round has just landed in - the fiftieth win is only the fiftieth once it
+     * has been written down.
+     */
+    run.earned = progress.award(store, ctx.user.id, {
+      game: run.game,
+      mode: run.mode,
+      difficulty: run.difficulty,
+      summary,
+      took: run.finishedAt - run.startedAt,
+      already,
+      record: recordFor(store, ctx.user.id, run.game),
     });
   }
 
@@ -631,6 +669,17 @@ function buildApi(store) {
   router.get("/api/pass", (ctx) => {
     const user = requireUser(ctx);
     return { pass: progress.forUser(store, user.id), rules: passRules() };
+  });
+
+  /*
+   * Every achievement, earned or not, with what it wants and what it gives.
+   */
+  router.get("/api/achievements", (ctx) => {
+    const user = requireUser(ctx);
+    return {
+      achievements: progress.achievementsFor(store, user.id),
+      games: games.CATALOGUE.map(({ key, name, icon }) => ({ key, name, icon })),
+    };
   });
 
   /* The wardrobe. Anything not unlocked is quietly swapped for the starter

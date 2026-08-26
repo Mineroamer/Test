@@ -82,8 +82,9 @@ function paintAccount() {
    * neither, so the section is not offered there rather than offered and
    * then found empty. */
   const sections = state.local
-    ? [["#/pass", "Pass"], ["#/board", "Board"], ["#/create", "Build"], ["#/stats", "Stats"]]
-    : [["#/friends", "Friends"], ["#/pass", "Pass"], ["#/board", "Board"], ["#/create", "Build"], ["#/stats", "Stats"]];
+    ? [["#/pass", "Pass"], ["#/achievements", "Awards"], ["#/board", "Board"], ["#/create", "Build"], ["#/stats", "Stats"]]
+    : [["#/friends", "Friends"], ["#/pass", "Pass"], ["#/achievements", "Awards"],
+       ["#/board", "Board"], ["#/create", "Build"], ["#/stats", "Stats"]];
 
   swap(nav, state.user
     ? sections.map(([href, label]) => h("a.btn.ghost.small", { href }, label))
@@ -140,6 +141,7 @@ const SCREENS = {
   play: () => import("./screens/play.js"),
   pass: () => import("./screens/pass.js"),
   board: () => import("./screens/board.js"),
+  achievements: () => import("./screens/achievements.js"),
 };
 
 let token = 0;
@@ -191,6 +193,11 @@ async function pick(parts) {
     case "pass": {
       requireUser();
       const mod = await SCREENS.pass();
+      return mod.render();
+    }
+    case "achievements": {
+      requireUser();
+      const mod = await SCREENS.achievements();
       return mod.render();
     }
     case "board": {

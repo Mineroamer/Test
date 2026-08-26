@@ -172,6 +172,9 @@ const summary = (puzzle, state) => ({
   score: state.score,
   maxScore: puzzle.maxScore,
   rank: rankFor(state.score, puzzle.maxScore).name,
+  /* How many of the words found used all seven letters. Nothing on screen
+   * reads it; it is what lets finding one be worth noticing. */
+  pangrams: state.found.filter((word) => isPangram(word, puzzle.letters)).length,
 });
 
 module.exports = {

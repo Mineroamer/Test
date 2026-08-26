@@ -875,11 +875,51 @@ label.field > span { font-size: 0.82rem; font-weight: 600; color: var(--ink-soft
   transition: background var(--fast) var(--ease-soft), color var(--fast) var(--ease-soft);
 }
 .st-cell:hover:not(:disabled) { background: var(--surface-sunk); }
-.st-cell.tracing { background: var(--ink); color: var(--surface); }
 .st-cell.found { background: var(--game-wash); color: var(--game); }
 .st-cell.spangram { background: var(--game); color: var(--accent-ink); }
 /* Lit by a hint: outlined rather than filled, since the word is still hidden. */
 .st-cell.lit { box-shadow: inset 0 0 0 2px var(--near); }
+
+/*
+ * A letter under the finger. It lifts as it is picked up rather than simply
+ * darkening, so a trace feels like it is being drawn rather than toggled.
+ */
+.st-cell.tracing {
+  background: var(--ink);
+  color: var(--surface);
+  transform: scale(1.08);
+  z-index: 2;
+}
+
+/*
+ * A word arriving.
+ *
+ * Each letter pops in turn along the path, a fortieth of a second apart, so a
+ * found word reads as being traced out rather than switched on all at once.
+ * `--step` is how far along its word the letter sits, set as the board is
+ * built. Only words found since the last paint carry it: without that, every
+ * word already on the board would replay this on every repaint.
+ */
+.st-cell.arriving {
+  animation: st-pop 420ms var(--spring) both;
+  animation-delay: calc(var(--step, 0) * 45ms);
+}
+@keyframes st-pop {
+  0% { transform: scale(1); }
+  45% { transform: scale(1.26); }
+  100% { transform: scale(1); }
+}
+
+/* A word the board would not take: the letters that were traced say so. */
+.st-cell.refused {
+  background: var(--off-wash);
+  color: var(--off);
+  animation: st-refuse 420ms var(--ease-soft) both;
+}
+@keyframes st-refuse {
+  0%, 100% { transform: none; }
+  30% { transform: scale(0.92); }
+}
 
 /* The joining lines sit under the letters. */
 .st-lines { position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: visible; }
@@ -887,6 +927,36 @@ label.field > span { font-size: 0.82rem; font-weight: 600; color: var(--ink-soft
 .st-line.tracing { stroke: var(--ink); opacity: 0.35; }
 .st-line.found { stroke: var(--game); opacity: 0.3; }
 .st-line.spangram { stroke: var(--game); opacity: 0.55; stroke-width: 10; }
+
+/*
+ * A new line draws itself along the path.
+ *
+ * `--length` is the polyline's own measured length, set from the view once the
+ * element is in the document - a stylesheet has no way to ask an arbitrary
+ * path how long it is. The dash is the whole line, and the offset walks it
+ * back to nothing.
+ */
+.st-line.drawing {
+  stroke-dasharray: var(--length);
+  stroke-dashoffset: var(--length);
+  animation: st-draw 520ms var(--ease) forwards;
+}
+.st-line.spangram.drawing { animation-duration: 900ms; }
+@keyframes st-draw { to { stroke-dashoffset: 0; } }
+
+/* The spangram is the one that names the theme, so it gets a moment. */
+.st-cell.spangram.arriving {
+  animation: st-spangram 640ms var(--spring) both;
+  animation-delay: calc(var(--step, 0) * 60ms);
+}
+@keyframes st-spangram {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 var(--game); }
+  40% { transform: scale(1.32); box-shadow: 0 0 0 8px color-mix(in srgb, var(--game) 0%, transparent); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 color-mix(in srgb, var(--game) 0%, transparent); }
+}
+
+/* The word joining the list below the board. */
+.found-list span.arriving { animation: rise var(--slow) var(--spring) both; }
 
 .st-board.shake { animation: shake 0.42s var(--ease-soft); }
 
@@ -1470,3 +1540,115 @@ ul.plain { margin: 0; padding-left: 18px; display: grid; gap: 6px; color: var(--
 .earned b { font: 700 19px/1 var(--mono); color: var(--muted); }
 .earned[data-won="true"] b { color: var(--rare-legendary); }
 .earned .grow { flex: 1; }
+
+/* ===================================================================== *
+ * Achievements.
+ *
+ * Rarity carries the colour here as it does on the pass, so the two screens
+ * read as one system. A locked row is dimmed but never hidden: it is what
+ * somebody is aiming at.
+ * ===================================================================== */
+
+.badge-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--rule);
+  background: var(--surface-sunk);
+  opacity: 0.72;
+  transition: opacity var(--mid) var(--ease), border-color var(--mid) var(--ease),
+              background var(--mid) var(--ease);
+}
+.badge-row.earned {
+  opacity: 1;
+  background: var(--surface-raised);
+  border-color: var(--rare-common);
+}
+.badge-row.earned[data-rarity="rare"] { border-color: var(--rare-rare); }
+.badge-row.earned[data-rarity="epic"] { border-color: var(--rare-epic); }
+.badge-row.earned[data-rarity="legendary"] {
+  border-color: var(--rare-legendary);
+  background: var(--rare-legendary-wash);
+}
+/* Not yet earned: the piece it holds is shown in grey, as a promise. */
+.badge-row:not(.earned) .badge-mark { filter: grayscale(1); opacity: 0.6; }
+
+.badge-mark {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  flex: none;
+}
+.badge-mark .pc-character { border-radius: 8px; }
+
+.badge-tick {
+  display: grid;
+  place-items: center;
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  border: 2px solid var(--rule-firm);
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+}
+.badge-row.earned .badge-tick {
+  border-color: var(--ok);
+  background: var(--ok-wash);
+  color: var(--ok);
+}
+
+.badge-prize { color: var(--muted); }
+.badge-row.earned .badge-prize { color: var(--ink-soft); }
+
+.badge-xp { text-align: right; }
+.badge-xp b { display: block; font: 600 15px/1.1 var(--mono); color: var(--muted); }
+.badge-row.earned .badge-xp b { color: var(--xp); }
+
+/* One won just now, sitting under the result. */
+.earned.badge-won {
+  text-decoration: none;
+  color: inherit;
+  background: var(--rare-epic-wash);
+  border-color: var(--rare-epic);
+}
+.earned.badge-won[data-rarity="legendary"] {
+  background: var(--rare-legendary-wash);
+  border-color: var(--rare-legendary);
+}
+.earned.badge-won .badge-tick {
+  width: 28px; height: 28px; font-size: 13px;
+  border-color: var(--rare-epic); color: var(--rare-epic); background: transparent;
+}
+.earned.badge-won[data-rarity="legendary"] .badge-tick {
+  border-color: var(--rare-legendary); color: var(--rare-legendary);
+}
+.earned.badge-won b { font: 600 15px/1 var(--mono); }
+
+.badge-burst {
+  display: grid;
+  place-items: center;
+  width: 76px; height: 76px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 40%, var(--rare-epic), color-mix(in srgb, var(--rare-epic) 55%, var(--game)));
+  color: #fff;
+  font-size: 34px;
+  line-height: 1;
+  animation: burst var(--slow) var(--spring) both;
+}
+
+/* A wardrobe piece that was earned rather than reached. */
+.wear.won { border-style: solid; }
+.won-star { color: var(--rare-legendary); margin-right: 4px; }
+
+/* A level crossed, shown under the result rather than over it. */
+.earned.levelled {
+  text-decoration: none;
+  color: inherit;
+  background: var(--rare-legendary-wash);
+  border-color: var(--rare-legendary);
+}
+.earned.levelled .level-badge { width: 30px; height: 30px; font-size: 13px; }

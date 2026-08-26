@@ -111,11 +111,15 @@ export async function render() {
       h("div.chip-row",
         ...mine.map((item) =>
           h("button.wear", {
-            class: worn[slot.key] === item.id ? "on" : "",
+            class: [worn[slot.key] === item.id ? "on" : "", item.earn ? "won" : ""].filter(Boolean).join(" "),
             "data-rarity": item.rarity,
             "aria-pressed": String(worn[slot.key] === item.id),
+            /* Earned rather than reached. Worth saying which is which - the
+             * whole point of the earned ones is that no amount of playing
+             * hands them over. */
+            title: item.earn ? "Earned by an achievement" : `From tier ${item.level}`,
             onClick: () => { worn[slot.key] = item.id; commit(); },
-          }, item.name)),
+          }, item.earn ? [h("span.won-star", {}, "★"), item.name] : item.name)),
         /* The next one along, shown but not wearable. A track you cannot see
          * ahead of you is just a number going up. */
         ...locked.slice(0, 1).map((item) =>

@@ -118,16 +118,16 @@ export async function render({ game, mode, code }) {
     footer.scrollIntoView({ behavior: "smooth", block: "nearest" });
 
     /*
-     * A level earned right now gets its card right now, over the result. Any
-     * other time - a level crossed in another tab, or on a device that then
-     * went to sleep - the pass screen shows it instead, so it is never simply
-     * missed. The import is lazy because most rounds do not level anyone up
-     * and the card is not worth loading until one does.
+     * Nothing pops over the result.
+     *
+     * A level-up used to open a card here. Once achievements started paying
+     * hundreds of XP at a time, levelling stopped being rare - and a modal
+     * over the board after a good round is a celebration that turns into an
+     * obstacle: its backdrop sits directly on Share and Another, which are the
+     * two things somebody wants next. Everything earned is listed under the
+     * result instead, where it can be read and tapped, and the pass screen
+     * still gives a new level its proper moment the next time it is opened.
      */
-    if (run.earned && run.earned.levelled) {
-      const mod = await import("./pass.js");
-      mod.levelUpSheet(run.earned.after, run.earned.unlocked);
-    }
   }
 
   /* --------------------------------------------------------- furniture */
@@ -223,10 +223,28 @@ export async function render({ game, mode, code }) {
     const got = run.earned;
     if (!got) return null;
 
-    return h("div.earned", { "data-won": String(!!got.won) },
-      h("b", {}, `+${got.xp} XP`),
-      h("span.small.muted.grow", {}, why(got)),
-      h("a.btn.ghost.small", { href: "#/pass" }, `Level ${got.after}`));
+    return h("div.stack", { style: { gap: "8px" } },
+      h("div.earned", { "data-won": String(!!got.won) },
+        h("b", {}, `+${got.xp} XP`),
+        h("span.small.muted.grow", {}, why(got)),
+        h("a.btn.ghost.small", { href: "#/pass" }, `Level ${got.after}`)),
+      got.levelled
+        ? h("a.earned.levelled", { href: "#/pass" },
+            h("b.level-badge", {}, String(got.after)),
+            h("span.stack.grow", { style: { gap: "1px" } },
+              h("strong", {}, `Level ${got.after}`),
+              h("span.tiny.muted", {}, got.unlocked.length
+                ? `Unlocked ${got.unlocked.map((item) => item.name).join(" and ")}`
+                : "Open the pass to see the track")),
+            h("span.small.muted", {}, "→"))
+        : null,
+      ...(got.badges || []).map((one) =>
+        h("a.earned.badge-won", { href: "#/achievements", "data-rarity": one.rarity },
+          h("span.badge-tick", {}, "★"),
+          h("span.stack.grow", { style: { gap: "1px" } },
+            h("strong", {}, one.name),
+            h("span.tiny.muted", {}, one.blurb)),
+          h("b", {}, `+${one.xp}`))));
   }
 
   function why(got) {

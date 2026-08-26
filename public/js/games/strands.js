@@ -22,6 +22,15 @@ export function create(ctx) {
    * submits a two-letter word, and building a trace by tapping is impossible.
    */
   let slid = false;
+  /*
+   * Which words have already had their moment.
+   *
+   * Every repaint redraws the whole board, so without remembering this, every
+   * word found so far would replay its animation each time anything happened -
+   * a board that fireworks at itself on every keystroke. Only the ones that
+   * arrived since the last paint are animated.
+   */
+  const seen = new Set();
 
   const board = h("div.st-board");
   const lines = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -56,8 +65,16 @@ export function create(ctx) {
       paint();
     },
     reject() {
-      board.classList.add("shake");
-      setTimeout(() => board.classList.remove("shake"), 420);
+      /* Flash the letters that were traced, then let go of them: a refused
+       * word should not sit there selected, waiting to be refused again. */
+      const refused = trace.slice();
+      refuse(refused);
+      setTimeout(() => {
+        if (trace.length === refused.length && trace.every((c, i) => c === refused[i])) {
+          trace = [];
+          paint();
+        }
+      }, 420);
       trace = [];
       paint();
     },
@@ -102,24 +119,47 @@ export function create(ctx) {
     const traced = new Set(trace);
     board.style.setProperty("--cols", p.cols);
 
+    /*
+     * Which words are new since the last paint, and where each of their
+     * letters sits along the path - the stagger reads as the word being
+     * traced out rather than switched on.
+     */
+    const step = new Map();
+    const fresh = new Set();
+    for (const one of p.foundCells) {
+      if (seen.has(one.word)) continue;
+      seen.add(one.word);
+      fresh.add(one.word);
+      one.cells.forEach((cell, i) => step.set(cell, i));
+    }
+
     swap(board, [...p.letters].map((letter, cell) =>
       h("button.st-cell", {
-        class: [role.get(cell) || "", traced.has(cell) ? "tracing" : ""].filter(Boolean).join(" "),
+        class: [
+          role.get(cell) || "",
+          traced.has(cell) ? "tracing" : "",
+          step.has(cell) ? "arriving" : "",
+        ].filter(Boolean).join(" "),
+        /* How far along its word this letter is, for the stagger. */
+        style: step.has(cell) ? { "--step": String(step.get(cell)) } : null,
         dataset: { cell },
         disabled: p.status !== "playing",
         "aria-label": `${letter}, row ${Math.floor(cell / p.cols) + 1}, column ${cell % p.cols + 1}`,
       }, letter)));
 
-    drawLines(role);
+    drawLines(role, fresh);
 
-    const shown = p.foundCells.map((one) =>
-      h("span", { class: one.spangram ? "pangram" : "" }, one.word));
+    const chips = p.foundCells.map((one) =>
+      h("span", {
+        class: [one.spangram ? "pangram" : "", fresh.has(one.word) ? "arriving" : ""]
+          .filter(Boolean).join(" "),
+      }, one.word));
     const extras = p.extras.map((word) => h("span", { style: { opacity: "0.6" } }, word));
     /* A paragraph, not a span: the found-word chips title-case their contents,
      * and the instruction is a sentence rather than a word. */
     swap(words,
-      shown.length || extras.length
-        ? [...shown, ...extras]
+      chips.length || extras.length
+        ? [...chips, ...extras]
         : h("p.small.muted", { style: { margin: 0 } },
             "Drag through letters, or tap them one by one."));
   }
@@ -129,7 +169,7 @@ export function create(ctx) {
    * from arithmetic on the grid, so this stays right at any size the board
    * happens to be drawn at.
    */
-  function drawLines(role) {
+  function drawLines(role, fresh = new Set()) {
     while (lines.firstChild) lines.removeChild(lines.firstChild);
 
     const box = board.getBoundingClientRect();
@@ -145,16 +185,31 @@ export function create(ctx) {
       return [spot.left - box.left + spot.width / 2, spot.top - box.top + spot.height / 2];
     };
 
-    const stroke = (path, kind) => {
+    const stroke = (path, kind, draw) => {
       const points = path.map(centre).filter(Boolean);
       if (points.length < 2) return;
       const line = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
       line.setAttribute("points", points.map(([x, y]) => `${x},${y}`).join(" "));
       line.setAttribute("class", "st-line " + kind);
       lines.append(line);
+
+      /*
+       * A new line draws itself along the path rather than appearing whole.
+       * The length has to be measured from the element once it is in the
+       * document, which is why this happens here and not in the stylesheet.
+       */
+      if (draw) {
+        const length = typeof line.getTotalLength === "function" ? line.getTotalLength() : 0;
+        if (length) {
+          line.style.setProperty("--length", String(length));
+          line.classList.add("drawing");
+        }
+      }
     };
 
-    for (const one of run.puzzle.foundCells) stroke(one.cells, one.spangram ? "spangram" : "found");
+    for (const one of run.puzzle.foundCells) {
+      stroke(one.cells, one.spangram ? "spangram" : "found", fresh.has(one.word));
+    }
     if (trace.length > 1) stroke(trace, "tracing");
   }
 
@@ -193,12 +248,35 @@ export function create(ctx) {
 
   function submit() {
     if (trace.length < 4) {
-      if (trace.length) ctx.say("Four letters or more.", "bad");
+      /* Too short is a refusal like any other, and looks like one. The server
+       * never sees it, so the view has to say so itself. */
+      if (trace.length) {
+        ctx.say("Four letters or more.", "bad");
+        refuse(trace);
+      }
       trace = [];
       paint();
       return;
     }
     ctx.actions.guess(trace.slice());
+  }
+
+  /*
+   * A word the board will not take.
+   *
+   * The letters that were traced flash back, not just the board: it says
+   * "that one", rather than "something went wrong somewhere".
+   */
+  function refuse(path) {
+    for (const cell of path) {
+      const node = board.querySelector(`[data-cell="${cell}"]`);
+      if (node) node.classList.add("refused");
+    }
+    board.classList.add("shake");
+    setTimeout(() => {
+      board.classList.remove("shake");
+      for (const node of board.querySelectorAll(".refused")) node.classList.remove("refused");
+    }, 420);
   }
 
   function clear() {

@@ -147,10 +147,20 @@ function buildEngines() {
   /* The XP formula and the cosmetic track. Both are plain modules with no
    * requires of their own, so packing them is only stripping the wrapper -
    * and it means a level means the same thing here as on the hosted club. */
+  /*
+   * Point a sibling require at the packed module rather than deleting it.
+   * Deleting worked while nothing actually used one; achievements.js reads
+   * cosmetics to name the piece each award carries, and a deleted require
+   * would have left that undefined only in the packed build - working
+   * perfectly on the server and throwing on the single page.
+   *
+   * PC.cosmetics and PC.xp are both defined above this in the output.
+   */
   const plain = (file) => read("src", "server", file)
     .replace(/^"use strict";\n/, "")
-    .replace(/^const xp = require\("\.\/xp\.js"\);\n/m, "")
-    .replace(/^const cosmetics = require\("\.\/cosmetics\.js"\);\n/m, "")
+    .replace(/^const xp = require\("\.\/xp\.js"\);$/m, "const xp = PC.xp;")
+    .replace(/^const cosmetics = require\("\.\/cosmetics\.js"\);$/m, "const cosmetics = PC.cosmetics;")
+    .replace(/^const achievements = require\("\.\/achievements\.js"\);$/m, "const achievements = PC.achievements;")
     .replace(/module\.exports = /, "return ");
 
   /* The catalogue is the one thing the registry holds that is pure content,
@@ -168,6 +178,9 @@ ${plain("xp.js")}
 })();
 PC.cosmetics = (function () {
 ${plain("cosmetics.js")}
+})();
+PC.achievements = (function () {
+${plain("achievements.js")}
 })();
 PC.crosswordBuilder = (function () {
 ${builder}
@@ -252,6 +265,8 @@ const KEY_FOR = {
   "./screens/pass.js": "screens/pass",
   "./pass.js": "screens/pass",
   "./screens/board.js": "screens/board",
+  "./screens/achievements.js": "screens/achievements",
+  "./achievements.js": "screens/achievements",
   "../games/wordle.js": "games/wordle",
   "../games/connections.js": "games/connections",
   "../games/bee.js": "games/bee",
@@ -293,6 +308,7 @@ const ORDER = [
   ["screens/create", ["public", "js", "screens", "create.js"]],
   ["screens/pass", ["public", "js", "screens", "pass.js"]],
   ["screens/board", ["public", "js", "screens", "board.js"]],
+  ["screens/achievements", ["public", "js", "screens", "achievements.js"]],
   ["screens/play", ["public", "js", "screens", "play.js"]],
 ];
 

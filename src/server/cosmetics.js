@@ -115,6 +115,31 @@ const ITEMS = [
   { id: "tilesetter", slot: "title", name: "Tile Setter", rarity: "epic", level: 39 },
   { id: "pathfinder", slot: "title", name: "Pathfinder", rarity: "epic", level: 44 },
   { id: "legend", slot: "title", name: "Club Legend", rarity: "legendary", level: 50 },
+
+  /*
+   * ------------------------------------------------------- earned, not reached
+   *
+   * These are on no tier of the track. Playing for a season will not hand any
+   * of them over: the only way to get the horseshoe is to guess a Wordle first
+   * try, and the only way to get the sash is to walk an Expert route without a
+   * wasted guess. `earn` names the achievement that gives it.
+   *
+   * That is the whole point of having them. A pass rewards turning up, which
+   * is worth rewarding; nothing on it can say "look what I did".
+   */
+  { id: "horseshoe", slot: "held", name: "Lucky Horseshoe", rarity: "legendary", earn: "wordle:one" },
+  { id: "stopwatch", slot: "held", name: "Stopwatch", rarity: "epic", earn: "mini:fast" },
+  { id: "torch", slot: "held", name: "Torch", rarity: "epic", earn: "strands:clean" },
+  { id: "antennae", slot: "head", name: "Bee Antennae", rarity: "legendary", earn: "bee:queen" },
+  { id: "smug", slot: "face", name: "Insufferable", rarity: "epic", earn: "connections:purple" },
+  { id: "sash", slot: "outfit", name: "Navigator's Sash", rarity: "legendary", earn: "travle:expert" },
+  { id: "confetti", slot: "backdrop", name: "Confetti", rarity: "legendary", earn: "club:sweep" },
+  { id: "star", slot: "frame", name: "Star", rarity: "legendary", earn: "crossword:clean" },
+  { id: "devotee", slot: "title", name: "Devotee", rarity: "epic", earn: "wordle:streak" },
+  { id: "economist", slot: "title", name: "Economist", rarity: "epic", earn: "boxed:two" },
+  { id: "tilewright", slot: "title", name: "Tilewright", rarity: "epic", earn: "pips:clean" },
+  { id: "setter", slot: "title", name: "Puzzle Setter", rarity: "epic", earn: "club:shared" },
+  { id: "allrounder", slot: "title", name: "All-Rounder", rarity: "legendary", earn: "club:everything" },
 ];
 
 /*
@@ -141,12 +166,27 @@ function starter(hue) {
   return out;
 }
 
-/** Everything unlocked at or below a level, newest tier first. */
+/** Everything the track has handed over at or below a level, newest first. */
 const unlockedAt = (level) =>
   ITEMS.filter((item) => item.level <= level).sort((a, b) => b.level - a.level);
 
-/** What a given tier hands over. */
+/**
+ * Everything a player may actually wear: what the track has given them, plus
+ * whatever their achievements have.
+ */
+function unlockedFor(level, badges = []) {
+  const earned = new Set(badges);
+  return [
+    ...ITEMS.filter((item) => item.earn && earned.has(item.earn)),
+    ...unlockedAt(level),
+  ];
+}
+
+/** What a given tier hands over. Only the track: earned pieces are on none. */
 const rewardsAt = (level) => ITEMS.filter((item) => item.level === level);
+
+/** The pieces that only an achievement can give, whether earned yet or not. */
+const earnable = () => ITEMS.filter((item) => item.earn);
 
 /**
  * The whole track, tier by tier, for the pass screen. Each tier says what it
@@ -176,14 +216,18 @@ function track(xpModule, level) {
  * not an attack worth an error message. Nothing is at stake either way: the
  * failure mode is a hat you did not pick.
  */
-function sanitise(wanted, level, fallbackHue) {
+function sanitise(wanted, level, fallbackHue, badges = []) {
   const base = starter(fallbackHue);
   const clean = { ...base };
   const from = wanted && typeof wanted === "object" ? wanted : {};
+  const earned = new Set(badges);
+
+  /* Two ways to have earned a piece: reach its tier, or do the thing. */
+  const allowed = (item) => (item.earn ? earned.has(item.earn) : item.level <= level);
 
   for (const { key } of SLOTS) {
     const item = find(key, from[key]);
-    if (item && item.level <= level) clean[key] = item.id;
+    if (item && allowed(item)) clean[key] = item.id;
   }
 
   if (SKINS.includes(from.skin)) clean.skin = from.skin;
@@ -202,5 +246,5 @@ function describe(character) {
 
 module.exports = {
   RARITY, SLOTS, ITEMS, SKINS,
-  keyOf, find, starter, unlockedAt, rewardsAt, track, sanitise, describe,
+  keyOf, find, starter, unlockedAt, unlockedFor, rewardsAt, earnable, track, sanitise, describe,
 };

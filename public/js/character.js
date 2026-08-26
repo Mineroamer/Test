@@ -100,6 +100,20 @@ const BACKDROPS = {
     </g>
     ${[[16, 14], [64, 10], [86, 26], [34, 22], [76, 54]]
       .map(([x, y]) => `<circle cx="${x}" cy="${y}" r="1.4" fill="#fff" opacity="0.85"/>`).join("")}`,
+
+  /* Earned by finishing every one of a day's puzzles. */
+  confetti: (hue) => `
+    <rect width="100" height="100" rx="16" fill="${soft(hue, 93)}"/>
+    <g>
+      ${[[10, 14, -25, 0], [26, 6, 40, 1], [44, 18, -10, 2], [62, 8, 25, 3], [80, 16, -35, 4],
+         [6, 40, 15, 5], [30, 34, -45, 0], [70, 38, 30, 1], [92, 44, -20, 2],
+         [14, 66, 35, 3], [38, 58, -15, 4], [58, 70, 20, 5], [84, 64, -40, 0],
+         [22, 88, 10, 1], [50, 92, -30, 2], [74, 86, 45, 3]]
+        .map(([x, y, turn, tint]) =>
+          `<rect x="${x}" y="${y}" width="6" height="3.4" rx="1"
+                 transform="rotate(${turn} ${x + 3} ${y + 1.7})"
+                 fill="hsl(${(hue + tint * 61) % 360} 82% 58%)"/>`).join("")}
+    </g>`,
 };
 
 /* A field of hexagons, offset row by row, for the honeycomb backdrop. */
@@ -169,6 +183,14 @@ const OUTFITS = {
         .map(([x, y]) => `<circle cx="${x}" cy="${y}" r="3"/>`).join("")}
     </g>`,
 
+  /* Earned by walking an Expert route without a wasted guess. */
+  sash: (hue) => `
+    <path d="${TORSO}" fill="hsl(${hue} 28% 30%)"/>
+    <path d="M26 78 74 100" stroke="hsl(46 88% 58%)" stroke-width="9" stroke-linecap="round"/>
+    <path d="M26 78 74 100" stroke="hsl(40 72% 44%)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+    <circle cx="62" cy="92" r="5" fill="hsl(46 92% 66%)"/>
+    <path d="M62 88.5 63 91h2.6l-2.1 1.6.8 2.5-2.3-1.5-2.3 1.5.8-2.5-2.1-1.6H61z" fill="hsl(30 55% 26%)"/>`,
+
   robes: (hue, id) => `
     <defs><linearGradient id="rb${id}" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="hsl(${hue} 46% 34%)"/>
@@ -229,6 +251,15 @@ const FACES = {
     <path d="M47 43h6" stroke="#22252b" stroke-width="2.4"/>
     <path d="M34 42l4 5" stroke="${accent(hue, 70, 70)}" stroke-width="1.6" opacity="0.8"/>
     <path d="M43 53c4 4 11 4 14 0" fill="none" stroke="#2a2622" stroke-width="2.2" stroke-linecap="round"/>`,
+
+  /* Earned by opening Connections with the hardest group. */
+  smug: () => `
+    <g stroke="#2a2622" stroke-width="2.4" stroke-linecap="round" fill="none">
+      <path d="M37 42q5 -4 10 0"/>
+      <path d="M53 42q5 -4 10 0"/>
+    </g>
+    <path d="M41 53q9 6 18 -2" fill="none" stroke="#2a2622" stroke-width="2.4" stroke-linecap="round"/>
+    <path d="M60 34q5 1 7 4" fill="none" stroke="#2a2622" stroke-width="1.8" stroke-linecap="round"/>`,
 
   visor: (hue) => `
     <path d="M28 40q22 -9 44 0v8q-22 7 -44 0z" fill="hsl(${hue} 60% 34%)" opacity="0.92"/>
@@ -293,6 +324,15 @@ const HEADS = {
     </g>
     <circle cx="50" cy="24" r="2.4" fill="hsl(46 88% 58%)"/>`,
 
+  /* Earned by finding every word in the hive. */
+  antennae: () => `
+    <g fill="none" stroke="#2a2622" stroke-width="2.4" stroke-linecap="round">
+      <path d="M42 26q-5 -10 -11 -13"/>
+      <path d="M58 26q5 -10 11 -13"/>
+    </g>
+    <circle cx="30" cy="12" r="4.6" fill="hsl(44 92% 58%)" stroke="#2a2622" stroke-width="1.6"/>
+    <circle cx="70" cy="12" r="4.6" fill="hsl(44 92% 58%)" stroke="#2a2622" stroke-width="1.6"/>`,
+
   crown: () => `
     <path d="M28 34 33 15l8 10 9-13 9 13 8-10 5 19z" fill="hsl(46 90% 58%)"/>
     <rect x="28" y="32" width="44" height="9" rx="2.5" fill="hsl(42 80% 44%)"/>
@@ -348,6 +388,31 @@ const HELD = {
     <rect x="67" y="72" width="22" height="6" rx="2" fill="hsl(36 62% 32%)"/>
     <path d="M72 82q6 4 12 0v6q-6 4-12 0z" fill="hsl(44 92% 60%)"/>`,
 
+  /* Earned by guessing a Wordle first try. */
+  horseshoe: () => `
+    <g transform="rotate(12 78 80)">
+      <path d="M70 92a10 12 0 1 1 16 0" fill="none" stroke="hsl(44 62% 50%)" stroke-width="6" stroke-linecap="round"/>
+      <path d="M70 92a10 12 0 1 1 16 0" fill="none" stroke="hsl(48 82% 68%)" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="70" cy="92" r="1.6" fill="hsl(30 45% 28%)"/>
+      <circle cx="86" cy="92" r="1.6" fill="hsl(30 45% 28%)"/>
+    </g>`,
+
+  /* Earned by filling the Mini inside a minute. */
+  stopwatch: () => `
+    <circle cx="78" cy="82" r="11" fill="#f4f3ef" stroke="hsl(215 18% 32%)" stroke-width="2.6"/>
+    <rect x="74" y="67" width="8" height="4" rx="1.4" fill="hsl(215 18% 32%)"/>
+    <path d="M78 82V75M78 82l5 3" stroke="hsl(352 62% 50%)" stroke-width="2" stroke-linecap="round"/>
+    <circle cx="78" cy="82" r="1.4" fill="hsl(215 18% 32%)"/>`,
+
+  /* Earned by finding every theme word with the lights off. */
+  torch: () => `
+    <g transform="rotate(-20 78 82)">
+      <rect x="73" y="78" width="10" height="16" rx="2" fill="hsl(215 16% 34%)"/>
+      <path d="M71 78h14l-2 -6H73z" fill="hsl(215 18% 44%)"/>
+      <path d="M78 72 62 52h32z" fill="hsl(52 96% 74%)" opacity="0.4"/>
+      <circle cx="78" cy="73" r="3.4" fill="hsl(52 96% 78%)"/>
+    </g>`,
+
   quill: () => `
     <path d="M88 60q-16 8-20 26 12 2 18-8t2-18z" fill="hsl(46 88% 62%)"/>
     <path d="M86 63q-12 8-16 22" fill="none" stroke="hsl(40 66% 42%)" stroke-width="1.4"/>
@@ -376,6 +441,18 @@ const FRAMES = {
   neon: (hue) => `
     <rect x="3" y="3" width="94" height="94" rx="15" fill="none" stroke="${accent(hue, 60, 90)}" stroke-width="6" opacity="0.35"/>
     <rect x="3" y="3" width="94" height="94" rx="15" fill="none" stroke="${accent(hue, 74, 96)}" stroke-width="2.4"/>`,
+  /* Earned by filling the whole crossword with no help at all. */
+  star: (hue, id) => `
+    <defs><linearGradient id="st${id}" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="hsl(46 92% 74%)"/>
+      <stop offset="1" stop-color="hsl(40 80% 46%)"/>
+    </linearGradient></defs>
+    <rect x="2.5" y="2.5" width="95" height="95" rx="15" fill="none" stroke="url(#st${id})" stroke-width="5"/>
+    <g fill="url(#st${id})">
+      ${[[50, 2.5], [2.5, 50], [97.5, 50], [50, 97.5]].map(([x, y]) =>
+        `<path d="M${x} ${y - 6}l1.9 4 4.3.6-3.1 3 .7 4.3-3.8-2-3.8 2 .7-4.3-3.1-3 4.3-.6z"/>`).join("")}
+    </g>`,
+
   wreath: () => `
     <rect x="2.5" y="2.5" width="95" height="95" rx="15" fill="none" stroke="hsl(140 34% 40%)" stroke-width="4"/>
     <g fill="hsl(140 40% 46%)">

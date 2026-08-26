@@ -13,6 +13,7 @@
 
 const xp = require("./xp.js");
 const cosmetics = require("./cosmetics.js");
+const achievements = require("./achievements.js");
 
 const DAY_MS = 86400000;
 
@@ -26,6 +27,9 @@ const blank = (hue) => ({
    * still gets its moment. */
   seenLevel: 1,
   awards: [],   // { at, day, game, mode, xp } - recent, for the weekly board
+  /* Achievements earned, and when. Some carry a cosmetic that is on no tier
+   * of the pass, so this is also part of what the player may wear. */
+  badges: {},   // id -> when it was earned
 });
 
 /* A week of awards is all the weekly board needs, and it keeps one player's
@@ -44,8 +48,12 @@ function rowFor(store, userId) {
   if (typeof row.xp !== "number") row.xp = 0;
   if (!row.character) row.character = cosmetics.starter(200);
   if (!Array.isArray(row.awards)) row.awards = [];
+  if (!row.badges || typeof row.badges !== "object") row.badges = {};
   return row;
 }
+
+/** Which achievements a player has, as a plain list of ids. */
+const badgesOf = (row) => Object.keys(row.badges || {});
 
 /**
  * How many rounds of this game the player has already finished today. This is
@@ -68,20 +76,31 @@ function playedToday(store, userId, game, day, since) {
  * show the bar moving and, if it happened, what was unlocked. Returns null for
  * a guest, because there is nowhere to put it.
  */
-function award(store, userId, { game, mode, difficulty, summary, took, day, startOfDay }) {
+function award(store, userId, { game, mode, difficulty, summary, took, already = 0, record = {} }) {
   if (!userId) return null;
 
   const row = rowFor(store, userId);
   const before = xp.progressFor(row.xp);
-
-  const already = playedToday(store, userId, game, day, startOfDay || Date.now() - DAY_MS);
   const earned = xp.award({ game, mode, difficulty, summary, took, already });
 
-  row.xp += earned.xp;
+  /*
+   * Achievements are settled with the round, and their XP goes in with it, so
+   * the level is worked out once from the whole lot. A round that both fills
+   * the bar and earns a badge should level you up once, not twice.
+   */
+  const now = Date.now();
+  const badges = achievements.earnedBy(
+    { game, mode, difficulty, summary, took, won: !!(summary && summary.won), ...record },
+    badgesOf(row)
+  );
+  for (const one of badges) row.badges[one.id] = now;
+  const badgeXp = badges.reduce((sum, one) => sum + one.xp, 0);
+
+  row.xp += earned.xp + badgeXp;
   row.level = xp.levelFor(row.xp);
   const after = xp.progressFor(row.xp);
 
-  row.awards.push({ at: Date.now(), game, mode, xp: earned.xp });
+  row.awards.push({ at: now, game, mode, xp: earned.xp + badgeXp });
   if (row.awards.length > AWARDS_KEPT) row.awards = row.awards.slice(-AWARDS_KEPT);
 
   store.touch();
@@ -94,6 +113,8 @@ function award(store, userId, { game, mode, difficulty, summary, took, day, star
      * unlimited rounds. The screen says so rather than leaving it a mystery. */
     weight: earned.weight,
     repeat: mode !== "daily" && already >= xp.FREE_ROUNDS,
+    badges: badges.map((one) => achievements.publicOf(one, now)),
+    badgeXp,
     before: before.level,
     after: after.level,
     levelled: after.level > before.level,
@@ -114,14 +135,32 @@ const levelsBetween = (from, to) => {
 function forUser(store, userId) {
   const row = rowFor(store, userId);
   const progress = xp.progressFor(row.xp);
+  const badges = badgesOf(row);
   return {
     ...progress,
     character: row.character,
     /* What has not been shown yet. The screen clears it once it has. */
     pending: progress.level > (row.seenLevel || 1) ? (row.seenLevel || 1) : null,
-    unlocked: cosmetics.unlockedAt(progress.level).map((item) => ({ ...item })),
+    /* Everything wearable: what the track has given, plus what was earned. */
+    unlocked: cosmetics.unlockedFor(progress.level, badges).map((item) => ({ ...item })),
     track: cosmetics.track(xp, progress.level),
+    badges,
   };
+}
+
+/**
+ * Every achievement, with the ones this player has marked and dated.
+ *
+ * The locked ones are listed too. A goal you cannot see is not a goal, and a
+ * list that only shows what you already have is a trophy cabinet rather than
+ * something to aim at.
+ */
+function achievementsFor(store, userId) {
+  const row = rowFor(store, userId);
+  return achievements.ACHIEVEMENTS.map((one) => ({
+    ...achievements.publicOf(one, row.badges[one.id] || null),
+    earned: !!row.badges[one.id],
+  }));
 }
 
 /** Mark the level-up card as shown, so it does not come back on every load. */
@@ -136,7 +175,8 @@ function markSeen(store, userId) {
 function equip(store, userId, wanted) {
   const row = rowFor(store, userId);
   const user = store.data.users[userId];
-  row.character = cosmetics.sanitise(wanted, xp.levelFor(row.xp), user ? user.colour : 200);
+  row.character = cosmetics.sanitise(
+    wanted, xp.levelFor(row.xp), user ? user.colour : 200, badgesOf(row));
   store.touch();
   return row.character;
 }
@@ -205,4 +245,7 @@ function leaderboard(store, { window: span = "all", limit = 100, viewer = null }
   };
 }
 
-module.exports = { blank, rowFor, award, forUser, markSeen, equip, publicFor, leaderboard, playedToday, AWARDS_KEPT };
+module.exports = {
+  blank, rowFor, award, forUser, achievementsFor, markSeen, equip, publicFor,
+  leaderboard, playedToday, badgesOf, AWARDS_KEPT,
+};
